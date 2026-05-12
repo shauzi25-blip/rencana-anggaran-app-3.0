@@ -78,6 +78,8 @@ export async function POST(req: NextRequest) {
       }));
 
       const row = {
+        vendorId: inv.vendorId,
+        invoiceId: inv.id,
         nomorInvoice: inv.noPi,
         tglFaktur: inv.tglFaktur ? inv.tglFaktur.toISOString().split('T')[0] : inv.tglBeli.toISOString().split('T')[0],
         namaRekening: inv.vendor.accountName || inv.vendor.name,

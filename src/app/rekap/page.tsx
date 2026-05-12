@@ -36,6 +36,8 @@ export default function RekapPage() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [aiAllLoading, setAiAllLoading] = useState(false);
   const [aiProgress, setAiProgress] = useState('');
+  const [bankAccountDrafts, setBankAccountDrafts] = useState<Record<string, string>>({});
+  const [savingBankAccount, setSavingBankAccount] = useState<Record<string, boolean>>({});
   const tableRef = useRef<HTMLDivElement>(null);
 
   // Modal state for Item History
@@ -262,6 +264,63 @@ export default function RekapPage() {
     setShowHistoryModal(true);
   };
 
+  const getBankAccountDraft = (row: any) => {
+    const key = row.vendorId || row.nomorInvoice;
+    if (bankAccountDrafts[key] !== undefined) return bankAccountDrafts[key];
+    return row.nomorRekening && row.nomorRekening !== '-' ? row.nomorRekening : '';
+  };
+
+  const updateBankAccountDraft = (row: any, value: string) => {
+    const key = row.vendorId || row.nomorInvoice;
+    setBankAccountDrafts((drafts) => ({ ...drafts, [key]: value }));
+  };
+
+  const saveBankAccount = async (row: any) => {
+    if (!row.vendorId) {
+      alert('Vendor tidak ditemukan untuk baris ini.');
+      return;
+    }
+
+    const bankAccount = getBankAccountDraft(row).trim();
+    setSavingBankAccount((state) => ({ ...state, [row.vendorId]: true }));
+
+    try {
+      const res = await fetch('/api/vendors/bank-account', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vendorId: row.vendorId,
+          bankAccount,
+        }),
+      });
+      const json = await res.json();
+
+      if (!json.success) {
+        throw new Error(json.error || 'Gagal update nomor rekening');
+      }
+
+      const savedBankAccount = json.data?.bankAccount || '';
+      setCompanyGroups((groups) =>
+        groups.map((cg: any) => ({
+          ...cg,
+          vendorGroups: cg.vendorGroups.map((vg: any) => ({
+            ...vg,
+            rows: vg.rows.map((rekapRow: any) =>
+              rekapRow.vendorId === row.vendorId
+                ? { ...rekapRow, nomorRekening: savedBankAccount || '-' }
+                : rekapRow
+            ),
+          })),
+        }))
+      );
+      setBankAccountDrafts((drafts) => ({ ...drafts, [row.vendorId]: savedBankAccount }));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Gagal update nomor rekening');
+    } finally {
+      setSavingBankAccount((state) => ({ ...state, [row.vendorId]: false }));
+    }
+  };
+
   // Priority badge renderer
   const renderPriorityBadge = (score: number) => {
     if (score >= 80) {
@@ -444,7 +503,50 @@ export default function RekapPage() {
                                         {row.namaRekening || '-'}
                                       </td>
                                       <td rowSpan={itemCount} style={{ verticalAlign: 'top', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
-                                        {row.nomorRekening || '-'}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 150 }}>
+                                          <input
+                                            type="text"
+                                            value={getBankAccountDraft(row)}
+                                            onChange={(event) => updateBankAccountDraft(row, event.target.value)}
+                                            onKeyDown={(event) => {
+                                              if (event.key === 'Enter') {
+                                                event.preventDefault();
+                                                saveBankAccount(row);
+                                              }
+                                            }}
+                                            placeholder="Isi no. rekening"
+                                            style={{
+                                              width: 110,
+                                              border: '1px solid #cbd5e1',
+                                              borderRadius: 6,
+                                              padding: '5px 7px',
+                                              fontSize: 11,
+                                              fontFamily: 'var(--font-mono)',
+                                              color: '#0f172a',
+                                              background: 'white',
+                                              outline: 'none',
+                                            }}
+                                          />
+                                          <button
+                                            type="button"
+                                            data-html2canvas-ignore="true"
+                                            onClick={() => saveBankAccount(row)}
+                                            disabled={savingBankAccount[row.vendorId]}
+                                            style={{
+                                              border: '1px solid #99f6e4',
+                                              borderRadius: 6,
+                                              background: savingBankAccount[row.vendorId] ? '#f1f5f9' : '#f0fdfa',
+                                              color: '#0f766e',
+                                              padding: '5px 8px',
+                                              fontSize: 10,
+                                              fontWeight: 700,
+                                              cursor: savingBankAccount[row.vendorId] ? 'not-allowed' : 'pointer',
+                                              whiteSpace: 'nowrap',
+                                            }}
+                                          >
+                                            {savingBankAccount[row.vendorId] ? '...' : 'Simpan'}
+                                          </button>
+                                        </div>
                                       </td>
                                       <td rowSpan={itemCount} style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600, verticalAlign: 'top', fontSize: 11 }}>
                                         {formatRupiah(row.totalRencanaBayar)}
