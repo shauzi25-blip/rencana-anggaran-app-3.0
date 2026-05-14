@@ -9,6 +9,39 @@ let driveClient: drive_v3.Drive | null = null;
 const invoiceCache = new Map<string, { files: InvoiceFile[]; timestamp: number }>();
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
+function escapeDriveQueryValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function normalizePiToken(value: string): string {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .replace(/^P[1IL]/, 'PI');
+}
+
+function getPiDigits(value: string): string {
+  return normalizePiToken(value).replace(/^PI/, '').replace(/\D/g, '');
+}
+
+function extractNormalizedPiTokens(value: string): string[] {
+  const normalized = value.toUpperCase();
+  const tokens = normalized.match(/P[1IL]?\s*[-_ ]*\d{6,}/g) || [];
+
+  return tokens.map(normalizePiToken);
+}
+
+function fileNameMatchesPi(fileName: string, piNumber: string): boolean {
+  const expectedToken = normalizePiToken(piNumber);
+  const expectedDigits = getPiDigits(piNumber);
+  const fileTokens = extractNormalizedPiTokens(fileName);
+
+  if (fileTokens.includes(expectedToken)) return true;
+
+  const compactFileName = fileName.replace(/\D/g, '');
+  return Boolean(expectedDigits) && compactFileName.includes(expectedDigits);
+}
+
 /**
  * Initialize Google Drive API client
  */
@@ -41,7 +74,7 @@ export async function searchInvoiceFiles(piNumber: string): Promise<InvoiceFile[
     
     // Menghilangkan awalan "PI" misal "PI12345" menjadi "12345"
     const cleanPiNumber = piNumber.replace(/^PI[-_ ]*/i, '');
-    let query = `(name contains '${piNumber}' or name contains '${cleanPiNumber}') and trashed = false`;
+    const query = `(name contains '${escapeDriveQueryValue(piNumber)}' or name contains '${escapeDriveQueryValue(cleanPiNumber)}') and trashed = false`;
 
     const response = await client.files.list({
       q: query,
@@ -50,12 +83,14 @@ export async function searchInvoiceFiles(piNumber: string): Promise<InvoiceFile[
       orderBy: 'modifiedTime desc',
     });
 
-    const files: InvoiceFile[] = (response.data.files || []).map(file => ({
-      id: file.id || '',
-      name: file.name || '',
-      webViewLink: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
-      mimeType: file.mimeType || '',
-    }));
+    const files: InvoiceFile[] = (response.data.files || [])
+      .filter(file => fileNameMatchesPi(file.name || '', piNumber))
+      .map(file => ({
+        id: file.id || '',
+        name: file.name || '',
+        webViewLink: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
+        mimeType: file.mimeType || '',
+      }));
 
     invoiceCache.set(piNumber, { files, timestamp: Date.now() });
     return files;

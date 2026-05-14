@@ -196,7 +196,7 @@ Jika tidak bisa memperkirakan, kembalikan: {"estimatedPrice": 0, "source": "unkn
                 const bankAccount = item.invoice.vendor.bankAccount || '';
                 const bankName = item.invoice.vendor.bankName || '';
                 
-                const ocrPrompt = `Tugas Anda memvalidasi data Invoice. Bandingkan data berikut dengan dokumen file invoice (Invoice: ${piNumber}):
+                const ocrPrompt = `Tugas Anda memvalidasi data Invoice. Bandingkan data berikut dengan dokumen file invoice (Invoice yang diminta: ${piNumber}):
 - Item yang dicari: "${item.namaBarang}" (hanya untuk acuan mencari baris)
 - Qty pada data: ${item.qtyPI}
 - Total Harga Item: Rp${formatDecimal(item.totalHarga)}
@@ -204,6 +204,13 @@ ${bankAccount ? `- Nomor Rekening data: ${bankAccount}` : '- Nomor Rekening data
 ${bankName ? `- Bank: ${bankName}` : ''}
 
 Validasi dengan ketentuan berikut:
+
+0. Validasi nomor invoice terlebih dahulu:
+   - Dokumen HARUS merupakan invoice ${piNumber}.
+   - Tulisan tangan "P1", "Pi", "Pl", atau "PI" boleh dianggap sebagai awalan "PI" HANYA jika angka setelahnya sama persis.
+   - Contoh: "P126050151" boleh dibaca sebagai "PI26050151".
+   - Jika dokumen menunjukkan nomor berbeda, misalnya dokumen "P126050157" sedangkan yang diminta "${piNumber}", maka dokumen SALAH dan kembalikan status ["Tidak Valid"].
+   - Jangan lanjut validasi item/rekening jika nomor invoice dokumen berbeda.
 
 1. Temukan baris item yang mirip atau merujuk ke "${item.namaBarang}" pada dokumen.
 
@@ -231,7 +238,7 @@ Aturan output:
 Output WAJIB JSON murni tanpa backtick:
 {
   "statuses": ["Valid"] atau bisa multipel misal ["Rekening Tidak Valid", "Selisih"] atau tunggal ["Tidak Valid"],
-  "reason": "Kosongkan jika Valid. Jika ada masalah (multipel/tunggal), gabungkan penjelasannya lebih spesifik maks 60 kata."
+  "reason": "Kosongkan jika Valid. Jika nomor invoice dokumen berbeda, tulis: Dokumen bukan invoice ${piNumber}; nomor yang terbaca adalah <nomor>. Jika ada masalah lain, gabungkan penjelasannya lebih spesifik maks 60 kata."
 }`;
 
                 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });

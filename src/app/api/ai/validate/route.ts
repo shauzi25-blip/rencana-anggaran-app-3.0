@@ -72,7 +72,11 @@ export async function POST(req: NextRequest) {
           const prompt = `
             Tugas Anda adalah memvalidasi data Invoice. 
             Gambar/PDF yang saya berikan adalah dokumen asli invoice/tagihan dari vendor.
-            Tolong cek apakah di dalam dokumen ini (invoice ${piNumber}) terdapat barang dengan deskripsi yang cocok/mendekati "${item.namaBarang}", dengan kuantitas: ${item.qtyPI}, dan harga: Rp${formatDecimal(item.hargaPI)}.
+            Nomor invoice yang diminta adalah ${piNumber}. Pertama, pastikan dokumen ini benar-benar invoice ${piNumber}.
+            Tulisan tangan "P1", "Pi", "Pl", atau "PI" boleh dianggap awalan "PI" hanya jika angka setelahnya sama persis.
+            Contoh: "P126050151" boleh dibaca sebagai "PI26050151", tetapi "P126050157" TIDAK sama dengan "PI26050151".
+            Jika nomor invoice dokumen berbeda dari ${piNumber}, JAWAB HANYA DENGAN KATA "DISCREPANCY".
+            Jika nomor invoice cocok, cek apakah di dalam dokumen ini terdapat barang dengan deskripsi yang cocok/mendekati "${item.namaBarang}", dengan kuantitas: ${item.qtyPI}, dan harga: Rp${formatDecimal(item.hargaPI)}.
             
             Jika terdapat selisih jumlah kuantitas, atau selisih harga yang cukup mencurigakan antara gambar dengan deskripsi saya, JAWAB HANYA DENGAN KATA "DISCREPANCY". 
             Jika angkanya wajar atau cocok, JAWAB HANYA DENGAN KATA "MATCH".
