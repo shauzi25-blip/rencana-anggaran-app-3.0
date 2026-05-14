@@ -56,8 +56,8 @@ export const FAKTUR_COLUMNS = {
 /** Column index mappings for Master Rekening */
 export const REKENING_COLUMNS = {
   NAMA_VENDOR: 0,
-  NAMA_PENERIMA: 1,
-  NO_REKENING: 2,
+  NO_REKENING: 1,
+  NAMA_PENERIMA: 2,
   NAMA_BANK: 3,
 } as const;
 

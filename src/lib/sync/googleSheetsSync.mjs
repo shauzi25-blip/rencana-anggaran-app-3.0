@@ -60,8 +60,8 @@ const PS = {
 
 const REKENING = {
   NAMA_VENDOR: 0,
-  NAMA_PENERIMA: 1,
-  NO_REKENING: 2,
+  NO_REKENING: 1,
+  NAMA_PENERIMA: 2,
   NAMA_BANK: 3,
 };
 
@@ -403,8 +403,8 @@ function parseBankRows(rows) {
 
   return rows.slice(1).map((row) => ({
     vendorName: toText(getCell(row, headerMap, ['Nama Vendor', 'Vendor Name'], REKENING.NAMA_VENDOR)),
-    accountName: toText(getCell(row, headerMap, ['Nama Penerima', 'Account Name'], REKENING.NAMA_PENERIMA)),
-    bankAccount: toText(getCell(row, headerMap, ['No Rekening', 'Bank Account'], REKENING.NO_REKENING)),
+    accountName: toText(getCell(row, headerMap, ['Nama Penerima', 'Nama Rekening', 'Account Name', 'Atas Nama'], REKENING.NAMA_PENERIMA)),
+    bankAccount: toText(getCell(row, headerMap, ['Nomor Rekening', 'No Rekening', 'Bank Account', 'Account Number'], REKENING.NO_REKENING)),
     bankName: toText(getCell(row, headerMap, ['Nama Bank', 'Bank Name'], REKENING.NAMA_BANK)),
   })).filter((row) => row.vendorName);
 }
