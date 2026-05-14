@@ -27,13 +27,12 @@ interface BulkUploadResult {
 }
 
 const isHeaderRow = (parts: string[]): boolean => {
-  const first = (parts[0] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const first = (parts[0] || '').replace(/^\uFEFF/, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const second = (parts[1] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  return (
-    ['nopi', 'nomorpi', 'purchaseinvoice', 'purchaseinvoicecode'].includes(first) ||
-    second.includes('sumberdana') ||
-    second.includes('pt')
-  );
+  const firstLooksLikeHeader = ['nopi', 'nomorpi', 'purchaseinvoice', 'purchaseinvoicecode'].includes(first);
+  const secondLooksLikeHeader = ['sumberdanapt', 'sumberdana', 'pt', 'perusahaan', 'company'].includes(second);
+
+  return firstLooksLikeHeader || (first === '' && secondLooksLikeHeader);
 };
 
 const normalizeCompany = (value: string): string => {
@@ -57,7 +56,7 @@ const parseBulkPIInput = (inputText: string): BulkPIInput[] => {
     const parts = line.split(/[,\t;|]+/).map((part) => part.trim());
     if (isHeaderRow(parts)) continue;
 
-    const noPi = parts[0] || '';
+    const noPi = (parts[0] || '').replace(/^\uFEFF/, '').trim();
     const company = normalizeCompany(parts[1] || '');
     const key = noPi.toUpperCase();
 
