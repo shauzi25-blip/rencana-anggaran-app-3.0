@@ -137,6 +137,7 @@ export async function GET(request: NextRequest) {
         where: {
           paymentState: { not: 'paid' },
           hutang: { gt: 0 },
+          sourceActive: true,
           ...(invoiceDateFilter ? { tglBeli: invoiceDateFilter } : {}),
         },
         include: {
@@ -144,6 +145,12 @@ export async function GET(request: NextRequest) {
         },
       }),
       prisma.invoiceItem.findMany({
+        where: {
+          sourceActive: true,
+          invoice: {
+            sourceActive: true,
+          },
+        },
         select: {
           namaBarang: true,
           hargaPI: true,

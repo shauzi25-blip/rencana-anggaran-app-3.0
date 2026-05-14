@@ -25,6 +25,8 @@ export async function POST(req: NextRequest) {
     let items = await prisma.invoiceItem.findMany({
       where: {
         namaBarang: namaBarang,
+        sourceActive: true,
+        invoice: { sourceActive: true },
       },
       include: {
         invoice: {
@@ -49,6 +51,8 @@ export async function POST(req: NextRequest) {
           namaBarang: {
             contains: namaBarang,
           },
+          sourceActive: true,
+          invoice: { sourceActive: true },
           id: { notIn: items.map(i => i.id) },
         },
         include: {
@@ -80,6 +84,8 @@ export async function POST(req: NextRequest) {
             namaBarang: {
               contains: words[0],
             },
+            sourceActive: true,
+            invoice: { sourceActive: true },
             id: { notIn: items.map(i => i.id) },
           },
           include: {

@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -23,6 +23,8 @@ model Vendor {
   bankAccount   String?
   bankName      String?
   accountName   String?
+  bankAccountEditedAt DateTime?
+  bankAccountSource   String   @default("sheet")
   invoices      PurchaseInvoice[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -45,9 +47,17 @@ model PurchaseInvoice {
   budgetStatus    String   @default("pending") // pending, budgeted, returned
   budgetedAt      DateTime?
   budgetedBy      String?
+  sourceKey       String?  @unique
+  sourceSheet     String?
+  sourceRowHash   String?
+  sourceActive    Boolean  @default(true)
+  lastSyncedAt    DateTime?
   items           InvoiceItem[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([sourceActive])
+  @@index([lastSyncedAt])
 }
 
 model InvoiceItem {
@@ -67,8 +77,16 @@ model InvoiceItem {
   marketPrice       Decimal? @db.Decimal(18, 4) // Harga pasar dari AI search
   aiRecommendation  String?  @db.Text // AI recommendation detail
   priorityScore     Int      @default(0) // 0-100 priority scoring
+  sourceKey         String?  @unique
+  sourceSheet       String?
+  sourceRowHash     String?
+  sourceActive      Boolean  @default(true)
+  lastSyncedAt      DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  @@index([sourceActive])
+  @@index([lastSyncedAt])
 }
 
 model StockItem {
@@ -99,11 +117,37 @@ model Embedding {
   sourceType String   // 'vendor', 'item', 'invoice', 'summary'
   sourceId   String   // ID of the source record
   content    String   @db.Text // Original text that was embedded
-  vector     String   @db.LongText // JSON array of floats
+  vector     String   @db.Text // JSON array of floats
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   @@index([sourceType, sourceId])
+}
+
+model SyncRun {
+  id              String    @id @default(uuid())
+  source          String    @default("google_published_csv")
+  status          String
+  dryRun          Boolean   @default(false)
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  durationMs      Int?
+  companiesSeen   Int       @default(0)
+  vendorsSeen     Int       @default(0)
+  invoicesSeen    Int       @default(0)
+  invoiceItemsSeen Int      @default(0)
+  bankRowsSeen    Int       @default(0)
+  companiesUpserted Int     @default(0)
+  vendorsUpserted   Int     @default(0)
+  invoicesUpserted  Int     @default(0)
+  itemsUpserted     Int     @default(0)
+  bankRowsApplied   Int     @default(0)
+  message         String?   @db.Text
+  error           String?   @db.Text
+  createdAt       DateTime  @default(now())
+
+  @@index([status, startedAt])
+  @@index([source, startedAt])
 }
 
 // TransactionHistory is implicitly managed by querying past InvoiceItems

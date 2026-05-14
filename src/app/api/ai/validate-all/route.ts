@@ -64,7 +64,9 @@ export async function POST(req: NextRequest) {
             where: {
               namaBarang: item.namaBarang,
               createdAt: { gte: threeMonthsAgo },
-              id: { not: itemId }
+              id: { not: itemId },
+              sourceActive: true,
+              invoice: { sourceActive: true },
             },
             include: { invoice: { include: { vendor: true } } },
             orderBy: { hargaPI: 'asc' }

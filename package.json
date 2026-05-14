@@ -7,7 +7,9 @@
     "postinstall": "prisma generate",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sync:sheets": "node scripts/sync-google-sheets.mjs",
+    "sync:sheets:dry-run": "node scripts/sync-google-sheets.mjs --dry-run"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

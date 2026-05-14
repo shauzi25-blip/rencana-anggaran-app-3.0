@@ -1,5 +1,5 @@
 // ============================================================
-// API Route: Fetch Dashboard Data (Unpaid PIs) from MySQL
+// API Route: Fetch Dashboard Data (Unpaid PIs) from Prisma/Supabase
 // ============================================================
 
 import { NextResponse } from 'next/server';
@@ -15,6 +15,7 @@ export async function GET() {
       where: {
         paymentState: { not: 'paid' }, // assuming 'paid' is fully paid
         budgetStatus: { in: ['pending', 'returned'] }, // Hide budgeted PIs
+        sourceActive: true,
       },
       include: {
         vendor: true,

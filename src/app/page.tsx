@@ -4,18 +4,16 @@ import React, { useEffect, useState, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
 import PITable from '@/components/PITable';
 import DashboardSummary from '@/components/DashboardSummary';
-import BulkUploadModal from '@/components/BulkUploadModal';
 import { useSelectedPIStore } from '@/store/useSelectedPI';
 import { calculateSummary } from '@/lib/transform';
 import type { RencanaAnggaranRow } from '@/types/finance';
-import { RefreshCw, ArrowRight, AlertCircle, Upload } from 'lucide-react';
+import { RefreshCw, ArrowRight, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DashboardPage() {
   const [data, setData] = useState<RencanaAnggaranRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const { selectedIds, setAllRows } = useSelectedPIStore();
 
   const fetchData = useCallback(async () => {
@@ -63,14 +61,6 @@ export default function DashboardPage() {
             >
               <RefreshCw size={16} className={loading ? 'pulse' : ''} />
               Refresh
-            </button>
-            <button
-              className="btn btn-secondary"
-              style={{ color: '#0f766e', borderColor: '#99f6e4', background: '#f0fdfa' }}
-              onClick={() => setShowBulkUpload(true)}
-            >
-              <Upload size={16} />
-              Upload Bulk PI
             </button>
             {selectedIds.size > 0 && (
               <Link href="/rekap" className="btn btn-primary" id="next-rekap-btn">
@@ -124,10 +114,6 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      {/* Bulk Upload Modal */}
-      {showBulkUpload && (
-        <BulkUploadModal onClose={() => setShowBulkUpload(false)} />
-      )}
     </div>
   );
 }

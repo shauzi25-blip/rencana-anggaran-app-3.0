@@ -22,8 +22,14 @@ export async function POST(req: NextRequest) {
 
     // Fetch invoices with relations
     const invoices = await prisma.purchaseInvoice.findMany({
-      where: { id: { in: piIds } },
-      include: { vendor: true, company: true, items: true }
+      where: { id: { in: piIds }, sourceActive: true },
+      include: {
+        vendor: true,
+        company: true,
+        items: {
+          where: { sourceActive: true },
+        },
+      }
     });
 
     // Build a map from row id -> perusahaan override (from frontend dropdown)

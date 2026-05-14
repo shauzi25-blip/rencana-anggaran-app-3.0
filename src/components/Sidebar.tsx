@@ -21,7 +21,6 @@ const navItems = [
   { href: '/', label: 'Modal Anggaran', icon: LayoutDashboard, description: 'Pilih Rekap Invoices' },
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3, description: 'Hutang & harga bahan' },
   { href: '/input', label: 'Input Manual PI', icon: FileSpreadsheet, description: 'Tambah Data Manual' },
-  { href: '/upload-csv', label: 'Upload CSV', icon: FileSpreadsheet, description: 'Migrasi via File' },
   { href: '/rekap', label: 'Rekap Anggaran', icon: FileSpreadsheet, description: 'Lihat rekap pembayaran' },
   { href: '/stock', label: 'Data Stock', icon: Package, description: 'Kelola stok barang' },
   { href: '/email', label: 'Email Approval', icon: Mail, description: 'Generate & kirim email' },

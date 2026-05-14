@@ -21,6 +21,8 @@ export async function PATCH(req: NextRequest) {
       where: { id: vendorId },
       data: {
         bankAccount: bankAccount || null,
+        bankAccountEditedAt: new Date(),
+        bankAccountSource: 'manual',
       },
       select: {
         id: true,
