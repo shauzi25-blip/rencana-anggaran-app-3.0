@@ -8,10 +8,71 @@ interface BulkUploadModalProps {
   onClose: () => void;
 }
 
+interface BulkPIInput {
+  noPi: string;
+  company: string;
+}
+
+interface BulkMatchedItem {
+  id: string;
+  noPi: string;
+  company: string;
+}
+
+interface BulkUploadResult {
+  matched: string[];
+  notFound: string[];
+  matchedIds: string[];
+  matchedItems: BulkMatchedItem[];
+}
+
+const isHeaderRow = (parts: string[]): boolean => {
+  const first = (parts[0] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const second = (parts[1] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return (
+    ['nopi', 'nomorpi', 'purchaseinvoice', 'purchaseinvoicecode'].includes(first) ||
+    second.includes('sumberdana') ||
+    second.includes('pt')
+  );
+};
+
+const normalizeCompany = (value: string): string => {
+  const raw = value.trim();
+  if (!raw) return '';
+
+  const normalized = raw.toUpperCase().replace(/\s+/g, ' ');
+  if (normalized === 'VCI' || normalized.includes('PT VIRTUS')) return 'PT VCI';
+  if (normalized === 'VVA' || normalized.includes('PT VVA')) return 'PT VVA';
+  if (normalized === 'VLA' || normalized.includes('PT VLA')) return 'PT VLA';
+  if (normalized.startsWith('PT ')) return normalized;
+  return `PT ${normalized}`;
+};
+
+const parseBulkPIInput = (inputText: string): BulkPIInput[] => {
+  const seen = new Set<string>();
+  const lines = inputText.trim().split(/[\n\r]+/).filter((line) => line.trim());
+  const parsedRows: BulkPIInput[] = [];
+
+  for (const line of lines) {
+    const parts = line.split(/[,\t;|]+/).map((part) => part.trim());
+    if (isHeaderRow(parts)) continue;
+
+    const noPi = parts[0] || '';
+    const company = normalizeCompany(parts[1] || '');
+    const key = noPi.toUpperCase();
+
+    if (!noPi || seen.has(key)) continue;
+    seen.add(key);
+    parsedRows.push({ noPi, company });
+  }
+
+  return parsedRows;
+};
+
 export default function BulkUploadModal({ onClose }: BulkUploadModalProps) {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ matched: string[]; notFound: string[]; matchedIds: string[]; matchedItems?: any[] } | null>(null);
+  const [result, setResult] = useState<BulkUploadResult | null>(null);
   const { selectAll, selectedIds, setCompany } = useSelectedPIStore();
 
   const handleParse = async () => {
@@ -19,16 +80,12 @@ export default function BulkUploadModal({ onClose }: BulkUploadModalProps) {
 
     setLoading(true);
     try {
-      // Parse CSV / tab-separated / newline-separated input
-      const lines = inputText.trim().split(/[\n\r]+/).filter(l => l.trim());
-      const piList = lines.map(line => {
-        const parts = line.split(/[,\t;|]+/).map(p => p.trim());
-        return {
-          noPi: parts[0] || '',
-          vendorName: parts[1] || '',
-          company: parts[2] || '',
-        };
-      }).filter(p => p.noPi);
+      const piList = parseBulkPIInput(inputText);
+
+      if (piList.length === 0) {
+        alert('Tidak ada No PI yang bisa diproses. Pastikan format: No PI, Sumber Dana (PT).');
+        return;
+      }
 
       const res = await fetch('/api/invoice/bulk-select', {
         method: 'POST',
@@ -120,10 +177,10 @@ export default function BulkUploadModal({ onClose }: BulkUploadModalProps) {
                 background: 'rgba(240, 253, 250, 0.6)', border: '1px solid rgba(153, 246, 228, 0.4)', borderRadius: 12,
                 padding: '12px 16px', marginBottom: 16, fontSize: 12, color: '#0f766e',
               }}>
-                <strong>Format yang didukung:</strong> Satu No. PI per baris. Bisa juga tambahkan Nama Vendor dan PT (opsional) dengan pemisah koma/tab.
+                <strong>Format upload:</strong> No PI, Sumber Dana (PT). Bisa paste dari Excel, CSV, TXT, atau TSV.
                 <br />
-                <code style={{ background: '#dbeafe', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', display: 'inline-block', marginTop: 4 }}>
-                  PI-001, CV Maju, PT VCI{'\n'}PI-002, CV Sejahtera, PT VVA
+                <code style={{ background: '#dbeafe', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', display: 'inline-block', marginTop: 4, whiteSpace: 'pre-line' }}>
+                  No PI, Sumber Dana (PT){'\n'}PI26050430, PT VCI{'\n'}PI26050401, PT VVA
                 </code>
               </div>
 
@@ -154,7 +211,7 @@ export default function BulkUploadModal({ onClose }: BulkUploadModalProps) {
               <textarea
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder={`Masukkan No. PI (satu per baris):\nPI-001\nPI-002\nPI-003\n...\n\nAtau format CSV:\nPI-001, CV Maju, PT VCI\nPI-002, CV Sejahtera, PT VVA`}
+                placeholder={`Masukkan format:\nNo PI, Sumber Dana (PT)\nPI26050430, PT VCI\nPI26050401, PT VVA\nPI26050399, PT VLA\n\nBisa juga paste langsung dari Excel dua kolom.`}
                 style={{
                   width: '100%',
                   minHeight: 200,
@@ -169,7 +226,7 @@ export default function BulkUploadModal({ onClose }: BulkUploadModalProps) {
               />
 
               <div style={{ marginTop: 8, fontSize: 11, color: '#6b7280' }}>
-                {inputText.trim() ? `${inputText.trim().split(/[\n\r]+/).filter(l => l.trim()).length} baris terdeteksi` : 'Belum ada data'}
+                {inputText.trim() ? `${parseBulkPIInput(inputText).length} PI siap diproses` : 'Belum ada data'}
               </div>
             </>
           ) : (
