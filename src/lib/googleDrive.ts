@@ -13,7 +13,7 @@ function escapeDriveQueryValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
-function normalizePiToken(value: string): string {
+export function normalizePiToken(value: string): string {
   return value
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '')
@@ -31,7 +31,7 @@ function extractNormalizedPiTokens(value: string): string[] {
   return tokens.map(normalizePiToken);
 }
 
-function fileNameMatchesPi(fileName: string, piNumber: string): boolean {
+export function fileNameMatchesPi(fileName: string, piNumber: string): boolean {
   const expectedToken = normalizePiToken(piNumber);
   const expectedDigits = getPiDigits(piNumber);
   const fileTokens = extractNormalizedPiTokens(fileName);

@@ -47,6 +47,10 @@ model PurchaseInvoice {
   budgetStatus    String   @default("pending") // pending, budgeted, returned
   budgetedAt      DateTime?
   budgetedBy      String?
+  bankAccountOverride String?
+  accountNameOverride String?
+  bankInfoEditedAt DateTime?
+  bankInfoSource   String?
   sourceKey       String?  @unique
   sourceSheet     String?
   sourceRowHash   String?

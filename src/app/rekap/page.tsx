@@ -21,6 +21,7 @@ import {
   Shield,
   Clock,
   AlertCircle,
+  Pencil,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -36,8 +37,9 @@ export default function RekapPage() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [aiAllLoading, setAiAllLoading] = useState(false);
   const [aiProgress, setAiProgress] = useState('');
-  const [bankAccountDrafts, setBankAccountDrafts] = useState<Record<string, string>>({});
-  const [savingBankAccount, setSavingBankAccount] = useState<Record<string, boolean>>({});
+  const [bankInfoModalRow, setBankInfoModalRow] = useState<any | null>(null);
+  const [bankInfoDraft, setBankInfoDraft] = useState({ accountName: '', bankAccount: '' });
+  const [savingBankInfo, setSavingBankInfo] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
 
   // Modal state for Item History
@@ -147,13 +149,15 @@ export default function RekapPage() {
     setAiProgress('Mengumpulkan data item...');
     try {
       // Collect all item IDs from all company groups
-      const allItems: { itemId: string; piNumber: string; driveFileId?: string }[] = [];
+      const allItems: { itemId: string; piNumber: string; driveFileId?: string; driveFileName?: string }[] = [];
       companyGroups.forEach((cg: any) => {
         cg.vendorGroups.forEach((vg: any) => {
           vg.rows.forEach((row: any) => {
-            const driveFileId = row.invoiceLinks?.[0]?.id;
+            const driveFile = row.invoiceLinks?.[0];
+            const driveFileId = driveFile?.id;
+            const driveFileName = driveFile?.name;
             row.items.forEach((item: any) => {
-              allItems.push({ itemId: item.id, piNumber: row.nomorInvoice, driveFileId });
+              allItems.push({ itemId: item.id, piNumber: row.nomorInvoice, driveFileId, driveFileName });
             });
           });
         });
@@ -264,60 +268,64 @@ export default function RekapPage() {
     setShowHistoryModal(true);
   };
 
-  const getBankAccountDraft = (row: any) => {
-    const key = row.vendorId || row.nomorInvoice;
-    if (bankAccountDrafts[key] !== undefined) return bankAccountDrafts[key];
-    return row.nomorRekening && row.nomorRekening !== '-' ? row.nomorRekening : '';
+  const openBankInfoModal = (row: any) => {
+    setBankInfoModalRow(row);
+    setBankInfoDraft({
+      accountName: row.namaRekening && row.namaRekening !== '-' ? row.namaRekening : '',
+      bankAccount: row.nomorRekening && row.nomorRekening !== '-' ? row.nomorRekening : '',
+    });
   };
 
-  const updateBankAccountDraft = (row: any, value: string) => {
-    const key = row.vendorId || row.nomorInvoice;
-    setBankAccountDrafts((drafts) => ({ ...drafts, [key]: value }));
-  };
-
-  const saveBankAccount = async (row: any) => {
-    if (!row.vendorId) {
-      alert('Vendor tidak ditemukan untuk baris ini.');
+  const saveBankInfo = async () => {
+    if (!bankInfoModalRow?.invoiceId) {
+      alert('Invoice tidak ditemukan untuk baris ini.');
       return;
     }
 
-    const bankAccount = getBankAccountDraft(row).trim();
-    setSavingBankAccount((state) => ({ ...state, [row.vendorId]: true }));
+    const accountName = bankInfoDraft.accountName.trim();
+    const bankAccount = bankInfoDraft.bankAccount.trim();
+    setSavingBankInfo(true);
 
     try {
-      const res = await fetch('/api/vendors/bank-account', {
+      const res = await fetch('/api/invoice/bank-info', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vendorId: row.vendorId,
+          invoiceId: bankInfoModalRow.invoiceId,
+          accountName,
           bankAccount,
         }),
       });
       const json = await res.json();
 
       if (!json.success) {
-        throw new Error(json.error || 'Gagal update nomor rekening');
+        throw new Error(json.error || 'Gagal update data rekening');
       }
 
-      const savedBankAccount = json.data?.bankAccount || '';
+      const savedAccountName = json.data?.namaRekening || '';
+      const savedBankAccount = json.data?.nomorRekening || '';
       setCompanyGroups((groups) =>
         groups.map((cg: any) => ({
           ...cg,
           vendorGroups: cg.vendorGroups.map((vg: any) => ({
             ...vg,
             rows: vg.rows.map((rekapRow: any) =>
-              rekapRow.vendorId === row.vendorId
-                ? { ...rekapRow, nomorRekening: savedBankAccount || '-' }
+              rekapRow.invoiceId === bankInfoModalRow.invoiceId
+                ? {
+                    ...rekapRow,
+                    namaRekening: savedAccountName || '-',
+                    nomorRekening: savedBankAccount || '-',
+                  }
                 : rekapRow
             ),
           })),
         }))
       );
-      setBankAccountDrafts((drafts) => ({ ...drafts, [row.vendorId]: savedBankAccount }));
+      setBankInfoModalRow(null);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Gagal update nomor rekening');
+      alert(error instanceof Error ? error.message : 'Gagal update data rekening');
     } finally {
-      setSavingBankAccount((state) => ({ ...state, [row.vendorId]: false }));
+      setSavingBankInfo(false);
     }
   };
 
@@ -504,47 +512,27 @@ export default function RekapPage() {
                                       </td>
                                       <td rowSpan={itemCount} style={{ verticalAlign: 'top', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 150 }}>
-                                          <input
-                                            type="text"
-                                            value={getBankAccountDraft(row)}
-                                            onChange={(event) => updateBankAccountDraft(row, event.target.value)}
-                                            onKeyDown={(event) => {
-                                              if (event.key === 'Enter') {
-                                                event.preventDefault();
-                                                saveBankAccount(row);
-                                              }
-                                            }}
-                                            placeholder="Isi no. rekening"
-                                            style={{
-                                              width: 110,
-                                              border: '1px solid #cbd5e1',
-                                              borderRadius: 6,
-                                              padding: '5px 7px',
-                                              fontSize: 11,
-                                              fontFamily: 'var(--font-mono)',
-                                              color: '#0f172a',
-                                              background: 'white',
-                                              outline: 'none',
-                                            }}
-                                          />
+                                          <span>{row.nomorRekening || '-'}</span>
                                           <button
                                             type="button"
                                             data-html2canvas-ignore="true"
-                                            onClick={() => saveBankAccount(row)}
-                                            disabled={savingBankAccount[row.vendorId]}
+                                            onClick={() => openBankInfoModal(row)}
                                             style={{
                                               border: '1px solid #99f6e4',
                                               borderRadius: 6,
-                                              background: savingBankAccount[row.vendorId] ? '#f1f5f9' : '#f0fdfa',
+                                              background: '#f0fdfa',
                                               color: '#0f766e',
-                                              padding: '5px 8px',
+                                              padding: 5,
                                               fontSize: 10,
                                               fontWeight: 700,
-                                              cursor: savingBankAccount[row.vendorId] ? 'not-allowed' : 'pointer',
-                                              whiteSpace: 'nowrap',
+                                              cursor: 'pointer',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
                                             }}
+                                            title="Edit nama dan nomor rekening"
                                           >
-                                            {savingBankAccount[row.vendorId] ? '...' : 'Simpan'}
+                                            <Pencil size={12} />
                                           </button>
                                         </div>
                                       </td>
@@ -750,6 +738,76 @@ export default function RekapPage() {
           currentPrice={selectedItemPrice}
           onClose={() => setShowHistoryModal(false)}
         />
+      )}
+
+      {/* Bank Info Edit Modal */}
+      {bankInfoModalRow && (
+        <div className="modal-overlay" onClick={() => !savingBankInfo && setBankInfoModalRow(null)}>
+          <div className="modal-content" style={{ maxWidth: 460, padding: '24px 28px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+              <Pencil size={22} color="#0f766e" />
+              <div>
+                <h3 style={{ margin: 0, color: '#111827', fontSize: 18, fontWeight: 700 }}>Edit Rekening Invoice</h3>
+                <p style={{ margin: '3px 0 0', color: '#64748b', fontSize: 12 }}>{bankInfoModalRow.nomorInvoice}</p>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 14 }}>
+              <label style={{ display: 'grid', gap: 6, fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                Nama Rekening
+                <input
+                  type="text"
+                  value={bankInfoDraft.accountName}
+                  onChange={(event) => setBankInfoDraft((draft) => ({ ...draft, accountName: event.target.value }))}
+                  placeholder="Contoh: BCA PT Sukanda Djaya"
+                  style={{
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 8,
+                    padding: '10px 12px',
+                    fontSize: 13,
+                    color: '#0f172a',
+                    outline: 'none',
+                  }}
+                />
+              </label>
+
+              <label style={{ display: 'grid', gap: 6, fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                Nomor Rekening
+                <input
+                  type="text"
+                  value={bankInfoDraft.bankAccount}
+                  onChange={(event) => setBankInfoDraft((draft) => ({ ...draft, bankAccount: event.target.value }))}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      saveBankInfo();
+                    }
+                  }}
+                  placeholder="Isi nomor rekening"
+                  style={{
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 8,
+                    padding: '10px 12px',
+                    fontSize: 13,
+                    fontFamily: 'var(--font-mono)',
+                    color: '#0f172a',
+                    outline: 'none',
+                  }}
+                />
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>
+              <button className="btn btn-secondary" onClick={() => setBankInfoModalRow(null)} disabled={savingBankInfo}>
+                Batal
+              </button>
+              <button className="btn btn-primary" onClick={saveBankInfo} disabled={savingBankInfo}>
+                {savingBankInfo ? <Loader2 size={16} className="pulse" /> : <CheckCircle2 size={16} />}
+                {savingBankInfo ? 'Menyimpan...' : 'Simpan'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Discrepancy Note Modal */}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { downloadInvoiceFileToBase64 } from '@/lib/googleDrive';
+import { downloadInvoiceFileToBase64, fileNameMatchesPi } from '@/lib/googleDrive';
 import { decimalToNumber, formatDecimal } from '@/lib/decimal';
 
 // Use edge duration if applicable on Vercel to help avoid timeouts
@@ -13,7 +13,7 @@ const prisma = new PrismaClient();
 export async function POST(req: NextRequest) {
   try {
     const { items } = await req.json() as {
-      items: { itemId: string; piNumber: string; driveFileId?: string }[];
+      items: { itemId: string; piNumber: string; driveFileId?: string; driveFileName?: string }[];
     };
 
     if (!items || items.length === 0) {
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < items.length; i += 3) {
       const batch = items.slice(i, i + 3);
 
-      await Promise.all(batch.map(async ({ itemId, piNumber, driveFileId }) => {
+      await Promise.all(batch.map(async ({ itemId, piNumber, driveFileId, driveFileName }) => {
         try {
           // Get the item from DB
           const item = await prisma.invoiceItem.findUnique({
@@ -187,8 +187,14 @@ Jika tidak bisa memperkirakan, kembalikan: {"estimatedPrice": 0, "source": "unkn
             }
           }
 
-          // 3b. OCR Document Validation via GEMINI with 3 statuses + Rp 2000 tolerance
-          if (genAI && driveFileId) {
+          // 3b. Validate selected Drive file title before OCR.
+          if (driveFileName && !fileNameMatchesPi(driveFileName, piNumber)) {
+            statusOcr = 'Tidak Valid';
+            ocrReason = `Judul file Drive tidak cocok dengan ${piNumber}. File yang dipakai: ${driveFileName}`;
+          }
+
+          // 3c. OCR Document Validation via GEMINI with 3 statuses + Rp 2000 tolerance
+          if (genAI && driveFileId && statusOcr !== 'Tidak Valid') {
             try {
               const fileData = await downloadInvoiceFileToBase64(driveFileId);
               
