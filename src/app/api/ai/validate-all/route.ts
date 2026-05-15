@@ -10,6 +10,33 @@ export const maxDuration = 60;
 
 const prisma = new PrismaClient();
 
+function isInvoiceNumberOnlyIssue(reason: string): boolean {
+  const lower = reason.toLowerCase();
+  const mentionsInvoiceNumber =
+    lower.includes('nomor invoice') ||
+    lower.includes('no invoice') ||
+    lower.includes('nomor pi') ||
+    lower.includes('no pi') ||
+    lower.includes('pi tidak ditemukan') ||
+    lower.includes('invoice tidak ditemukan');
+
+  if (!mentionsInvoiceNumber) return false;
+
+  const mentionsRealValidationIssue =
+    lower.includes('qty') ||
+    lower.includes('kuantitas') ||
+    lower.includes('jumlah') ||
+    lower.includes('harga') ||
+    lower.includes('total') ||
+    lower.includes('rekening') ||
+    lower.includes('barang') ||
+    lower.includes('item') ||
+    lower.includes('tidak bisa dibaca') ||
+    lower.includes('gagal dibaca');
+
+  return !mentionsRealValidationIssue;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { items } = await req.json() as {
@@ -202,7 +229,16 @@ Jika tidak bisa memperkirakan, kembalikan: {"estimatedPrice": 0, "source": "unkn
                 const bankAccount = item.invoice.vendor.bankAccount || '';
                 const bankName = item.invoice.vendor.bankName || '';
                 
-                const ocrPrompt = `Tugas Anda memvalidasi data Invoice. Bandingkan data berikut dengan dokumen file invoice (Invoice yang diminta: ${piNumber}):
+                const ocrPrompt = `Tugas Anda memvalidasi data invoice. Nomor PI sudah divalidasi oleh sistem dari judul file Google Drive sebelum dokumen ini dikirim ke AI.
+
+PENTING:
+- Jangan validasi nomor invoice/nomor PI dari isi dokumen.
+- Abaikan tulisan nomor invoice pada gambar/PDF, termasuk jika tulisan tangan sulit dibaca.
+- Jangan mengembalikan "Tidak Valid" hanya karena nomor invoice tidak terlihat atau tidak terbaca di isi dokumen.
+- Fokus validasi hanya pada item, qty, total harga, dan rekening.
+
+Data yang harus dibandingkan dengan isi dokumen:
+- No PI referensi sistem: ${piNumber}
 - Item yang dicari: "${item.namaBarang}" (hanya untuk acuan mencari baris)
 - Qty pada data: ${item.qtyPI}
 - Total Harga Item: Rp${formatDecimal(item.totalHarga)}
@@ -210,13 +246,6 @@ ${bankAccount ? `- Nomor Rekening data: ${bankAccount}` : '- Nomor Rekening data
 ${bankName ? `- Bank: ${bankName}` : ''}
 
 Validasi dengan ketentuan berikut:
-
-0. Validasi nomor invoice terlebih dahulu:
-   - Dokumen HARUS merupakan invoice ${piNumber}.
-   - Tulisan tangan "P1", "Pi", "Pl", atau "PI" boleh dianggap sebagai awalan "PI" HANYA jika angka setelahnya sama persis.
-   - Contoh: "P126050151" boleh dibaca sebagai "PI26050151".
-   - Jika dokumen menunjukkan nomor berbeda, misalnya dokumen "P126050157" sedangkan yang diminta "${piNumber}", maka dokumen SALAH dan kembalikan status ["Tidak Valid"].
-   - Jangan lanjut validasi item/rekening jika nomor invoice dokumen berbeda.
 
 1. Temukan baris item yang mirip atau merujuk ke "${item.namaBarang}" pada dokumen.
 
@@ -234,17 +263,18 @@ Validasi dengan ketentuan berikut:
    - Jika nomor rekening BERBEDA → "Rekening Tidak Valid"
 
 Aturan output:
-1. Jika dokumen tidak bisa dibaca atau bukan invoice → kembalikan status ["Tidak Valid"]
+1. Jika dokumen benar-benar tidak bisa dibaca sama sekali → kembalikan status ["Tidak Valid"]
 2. Lakukan evaluasi secara mandiri untuk Rekening dan Total Harga.
 3. JIKA Rekening berbeda/tidak ada di salah satu → tambahkan "Rekening Tidak Valid" ke array status.
 4. JIKA Qty/Total melebihi toleransi Rp 2.000 → tambahkan "Selisih" ke array status.
 5. JIKA poin 3 dan 4 KEDUANYA terjadi, array HARUS berisi ["Rekening Tidak Valid", "Selisih"].
 6. JIKA SEMUA COCOK dan tidak ada poin 3 atau 4 yang terjadi → kembalikan status ["Valid"].
+7. Nomor invoice/PI pada isi dokumen BUKAN dasar validasi. Jika nomor invoice/PI tidak terlihat, tetap lanjutkan validasi item/qty/total/rekening.
 
 Output WAJIB JSON murni tanpa backtick:
 {
   "statuses": ["Valid"] atau bisa multipel misal ["Rekening Tidak Valid", "Selisih"] atau tunggal ["Tidak Valid"],
-  "reason": "Kosongkan jika Valid. Jika nomor invoice dokumen berbeda, tulis: Dokumen bukan invoice ${piNumber}; nomor yang terbaca adalah <nomor>. Jika ada masalah lain, gabungkan penjelasannya lebih spesifik maks 60 kata."
+  "reason": "Kosongkan jika Valid. Jika ada masalah item/qty/total/rekening, gabungkan penjelasannya lebih spesifik maks 60 kata. Jangan menulis alasan terkait nomor invoice tidak ditemukan."
 }`;
 
                 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
@@ -277,12 +307,17 @@ Output WAJIB JSON murni tanpa backtick:
                   if (finalStatuses.length > 1 && finalStatuses.includes('Valid')) {
                     finalStatuses = finalStatuses.filter((s: string) => s !== 'Valid');
                   }
+                  const parsedReason = typeof parsed.reason === 'string' ? parsed.reason : '';
+                  if (finalStatuses.includes('Tidak Valid') && isInvoiceNumberOnlyIssue(parsedReason)) {
+                    finalStatuses = finalStatuses.filter((s: string) => s !== 'Tidak Valid');
+                    if (finalStatuses.length === 0) finalStatuses = ['Valid'];
+                  }
                   
                   statusOcr = finalStatuses.join(', ');
                   
                   // Store reason separately — NOT in rekomendasi
-                  if (!finalStatuses.includes('Valid') && parsed.reason) {
-                    ocrReason = parsed.reason;
+                  if (!finalStatuses.includes('Valid') && parsedReason && !isInvoiceNumberOnlyIssue(parsedReason)) {
+                    ocrReason = parsedReason;
                   }
                 } catch {
                   console.log('Failed to parse Gemini OCR JSON:', ocrText);
@@ -297,6 +332,9 @@ Output WAJIB JSON murni tanpa backtick:
                   if (tempStatuses.length > 0) {
                     statusOcr = tempStatuses.join(', ');
                     ocrReason = 'AI mendeteksi ketidaksesuaian pada dokumen';
+                  } else if (isInvoiceNumberOnlyIssue(ocrText)) {
+                    statusOcr = 'Valid';
+                    ocrReason = '';
                   } else if (ocrText.toLowerCase().includes('tidak valid')) {
                     statusOcr = 'Tidak Valid';
                     ocrReason = 'Dokumen tidak valid atau tidak bisa dibaca';
