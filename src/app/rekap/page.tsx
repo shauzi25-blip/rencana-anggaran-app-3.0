@@ -40,6 +40,13 @@ export default function RekapPage() {
   const [bankInfoModalRow, setBankInfoModalRow] = useState<any | null>(null);
   const [bankInfoDraft, setBankInfoDraft] = useState({ accountName: '', bankAccount: '' });
   const [savingBankInfo, setSavingBankInfo] = useState(false);
+  const [manualCheckItem, setManualCheckItem] = useState<any | null>(null);
+  const [manualDraft, setManualDraft] = useState({
+    isValid: false,
+    selectedStatuses: [] as string[],
+    manualReason: '',
+  });
+  const [savingManualCheck, setSavingManualCheck] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
 
   // Modal state for Item History
@@ -52,6 +59,16 @@ export default function RekapPage() {
 
   // Track if initial rekap has been loaded
   const initialLoadDone = useRef(false);
+
+  const manualProblemStatuses = ['Rekening Tidak Valid', 'Selisih', 'Tidak Valid'];
+
+  const splitStatus = (status?: string | null) =>
+    (status || 'pending').split(', ').map((s: string) => s.trim()).filter(Boolean);
+
+  const hasProblemStatus = (status?: string | null) => {
+    const statuses = splitStatus(status);
+    return statuses.some((st) => ['discrepancy', 'Selisih', 'Tidak Valid', 'Rekening Tidak Valid'].includes(st));
+  };
 
   // Group selected rows by perusahaan for the rekap — only on initial load
   useEffect(() => {
@@ -193,6 +210,8 @@ export default function RekapPage() {
                         ...item, 
                         statusOcr: result.status, 
                         ocrReason: result.ocrReason || '',
+                        finalStatusOcr: item.manualStatusOcr || result.status,
+                        finalReason: item.manualReason || result.ocrReason || '',
                         rekomendasi: result.recommendation, 
                         referensi: result.referensi,
                         priorityScore: result.priorityScore || 0,
@@ -329,6 +348,119 @@ export default function RekapPage() {
     }
   };
 
+  const openManualCheckModal = (item: any) => {
+    const manualStatuses = splitStatus(item.manualStatusOcr);
+    setManualCheckItem(item);
+    setManualDraft({
+      isValid: manualStatuses.includes('Valid'),
+      selectedStatuses: manualStatuses.filter((status) => manualProblemStatuses.includes(status)),
+      manualReason: item.manualReason || '',
+    });
+  };
+
+  const updateItemManualCheck = (itemId: string, data: any) => {
+    setCompanyGroups((groups) =>
+      groups.map((cg: any) => ({
+        ...cg,
+        vendorGroups: cg.vendorGroups.map((vg: any) => ({
+          ...vg,
+          rows: vg.rows.map((row: any) => ({
+            ...row,
+            items: row.items.map((item: any) =>
+              item.id === itemId
+                ? {
+                    ...item,
+                    manualStatusOcr: data.manualStatusOcr || null,
+                    manualReason: data.manualReason || '',
+                    manualCheckedAt: data.manualCheckedAt || null,
+                    finalStatusOcr: data.finalStatusOcr || data.statusOcr || item.statusOcr,
+                    finalReason: data.finalReason || data.ocrReason || item.ocrReason || '',
+                  }
+                : item
+            ),
+          })),
+        })),
+      }))
+    );
+  };
+
+  const toggleManualStatus = (status: string) => {
+    setManualDraft((draft) => {
+      const exists = draft.selectedStatuses.includes(status);
+      return {
+        ...draft,
+        isValid: false,
+        selectedStatuses: exists
+          ? draft.selectedStatuses.filter((value) => value !== status)
+          : [...draft.selectedStatuses, status],
+      };
+    });
+  };
+
+  const markManualValid = () => {
+    setManualDraft((draft) => ({ ...draft, isValid: true, selectedStatuses: [] }));
+  };
+
+  const saveManualCheck = async () => {
+    if (!manualCheckItem?.id) return;
+
+    const manualStatusOcr = manualDraft.isValid ? 'Valid' : manualDraft.selectedStatuses.join(', ');
+    if (!manualStatusOcr) {
+      alert('Pilih Tandai Valid atau minimal satu status masalah.');
+      return;
+    }
+
+    setSavingManualCheck(true);
+    try {
+      const res = await fetch('/api/invoice-item/manual-check', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemId: manualCheckItem.id,
+          manualStatusOcr,
+          manualReason: manualDraft.manualReason,
+        }),
+      });
+      const json = await res.json();
+
+      if (!json.success) {
+        throw new Error(json.error || 'Gagal menyimpan checking manual');
+      }
+
+      updateItemManualCheck(manualCheckItem.id, json.data);
+      setManualCheckItem(null);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Gagal menyimpan checking manual');
+    } finally {
+      setSavingManualCheck(false);
+    }
+  };
+
+  const resetManualCheck = async () => {
+    if (!manualCheckItem?.id) return;
+
+    setSavingManualCheck(true);
+    try {
+      const res = await fetch('/api/invoice-item/manual-check', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: manualCheckItem.id, reset: true }),
+      });
+      const json = await res.json();
+
+      if (!json.success) {
+        throw new Error(json.error || 'Gagal reset checking manual');
+      }
+
+      updateItemManualCheck(manualCheckItem.id, json.data);
+      setManualCheckItem(null);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Gagal reset checking manual');
+    } finally {
+      setSavingManualCheck(false);
+    }
+  };
+
   // Priority badge renderer
   const renderPriorityBadge = (score: number) => {
     if (score >= 80) {
@@ -437,7 +569,7 @@ export default function RekapPage() {
                   </div>
                   
                   <div className="table-wrapper" style={{ padding: 0, overflowX: 'auto' }}>
-                    <table className="data-table" style={{ fontSize: 11, border: 'none', minWidth: 1800 }}>
+                    <table className="data-table" style={{ fontSize: 11, border: 'none', minWidth: 1940 }}>
                       <thead>
                         <tr>
                           <th style={{ width: 30, textAlign: 'center' }}>No</th>
@@ -457,6 +589,7 @@ export default function RekapPage() {
                           <th style={{ minWidth: 80, textAlign: 'right' }}>Total</th>
                           <th style={{ minWidth: 80 }}>Lampiran</th>
                           <th style={{ minWidth: 180 }}>Status Dok.</th>
+                          <th style={{ minWidth: 130 }}>Checking Manual</th>
                           <th style={{ minWidth: 70 }}>Prioritas</th>
                           <th style={{ minWidth: 280 }}>Rekomendasi</th>
                           <th style={{ minWidth: 120 }}>Referensi Harga</th>
@@ -475,8 +608,9 @@ export default function RekapPage() {
                               const isFirstOfVendor = isFirstVendorRow && isFirstItemOfInvoice;
                               if (isFirstOfVendor) isFirstVendorRow = false;
 
-                              const statusArr = (item.statusOcr || 'pending').split(', ').map((s: string) => s.trim());
-                              const isDiscrepancy = statusArr.includes('discrepancy') || statusArr.includes('Selisih') || statusArr.includes('Tidak Valid') || statusArr.includes('Rekening Tidak Valid');
+                              const statusArr = splitStatus(item.statusOcr);
+                              const manualStatusArr = splitStatus(item.manualStatusOcr);
+                              const isDiscrepancy = hasProblemStatus(item.statusOcr);
 
                               return (
                                 <tr
@@ -628,6 +762,56 @@ export default function RekapPage() {
                                     </div>
                                   </td>
 
+                                  {/* Checking Manual */}
+                                  <td style={{ textAlign: 'center', fontSize: 11 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                                      {item.manualStatusOcr ? (
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4 }}>
+                                          {manualStatusArr.map((st: string, sIdx: number) => (
+                                            <span
+                                              key={sIdx}
+                                              className={st === 'Valid' ? 'badge on-time' : 'badge'}
+                                              style={st === 'Valid'
+                                                ? { fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }
+                                                : { fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+                                            >
+                                              {st === 'Valid' ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+                                              {st === 'Rekening Tidak Valid' ? 'Rek. Tidak Valid' : st}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span style={{ color: '#9ca3af', fontSize: 10 }}>Belum dicek</span>
+                                      )}
+
+                                      {item.manualReason && (
+                                        <div style={{ fontSize: 9, color: '#2563eb', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.manualReason}>
+                                          {item.manualReason.substring(0, 36)}
+                                        </div>
+                                      )}
+
+                                      <button
+                                        type="button"
+                                        onClick={() => openManualCheckModal(item)}
+                                        title="Edit checking manual"
+                                        style={{
+                                          width: 28,
+                                          height: 28,
+                                          borderRadius: 8,
+                                          border: '1px solid #bfdbfe',
+                                          background: item.manualStatusOcr ? '#eff6ff' : '#ffffff',
+                                          color: '#1d4ed8',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          cursor: 'pointer',
+                                        }}
+                                      >
+                                        <Pencil size={13} />
+                                      </button>
+                                    </div>
+                                  </td>
+
                                   {/* Prioritas */}
                                   <td style={{ textAlign: 'center', fontSize: 10 }}>
                                     {renderPriorityBadge(item.priorityScore || 0)}
@@ -717,7 +901,7 @@ export default function RekapPage() {
                         })}
                         
                         <tr style={{ background: 'rgba(240, 253, 250, 0.6)', fontWeight: 600 }}>
-                           <td colSpan={20} style={{ textAlign: 'right', padding: '12px 20px', fontSize: 13, color: '#0f766e' }}>
+                           <td colSpan={21} style={{ textAlign: 'right', padding: '12px 20px', fontSize: 13, color: '#0f766e' }}>
                              Subtotal {compGroup.companyName}: {formatRupiah(compGroup.subtotalCompany)}
                            </td>
                         </tr>
@@ -805,6 +989,121 @@ export default function RekapPage() {
                 {savingBankInfo ? <Loader2 size={16} className="pulse" /> : <CheckCircle2 size={16} />}
                 {savingBankInfo ? 'Menyimpan...' : 'Simpan'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Checking Modal */}
+      {manualCheckItem && (
+        <div className="modal-overlay" onClick={() => !savingManualCheck && setManualCheckItem(null)}>
+          <div className="modal-content" style={{ maxWidth: 560, padding: '24px 28px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <Pencil size={22} color="#1d4ed8" />
+              <div>
+                <h3 style={{ margin: 0, color: '#111827', fontSize: 18, fontWeight: 700 }}>Checking Manual</h3>
+                <p style={{ margin: '3px 0 0', color: '#64748b', fontSize: 12 }}>{manualCheckItem.namaBarang}</p>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 14 }}>
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#991b1b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>
+                  Catatan AI
+                </div>
+                <p style={{ margin: 0, color: '#7f1d1d', fontSize: 13, lineHeight: 1.55 }}>
+                  {manualCheckItem.ocrReason || 'AI belum memberikan catatan masalah untuk item ini.'}
+                </p>
+              </div>
+
+              <div style={{ display: 'grid', gap: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#334155' }}>Status Manual</div>
+                <button
+                  type="button"
+                  onClick={markManualValid}
+                  style={{
+                    border: manualDraft.isValid ? '1px solid #86efac' : '1px solid #cbd5e1',
+                    background: manualDraft.isValid ? '#f0fdf4' : '#ffffff',
+                    color: manualDraft.isValid ? '#166534' : '#334155',
+                    borderRadius: 10,
+                    padding: '10px 12px',
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <CheckCircle2 size={16} />
+                  Tandai Valid
+                </button>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+                  {manualProblemStatuses.map((status) => {
+                    const checked = manualDraft.selectedStatuses.includes(status);
+                    return (
+                      <label
+                        key={status}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          border: checked ? '1px solid #93c5fd' : '1px solid #cbd5e1',
+                          background: checked ? '#eff6ff' : '#ffffff',
+                          color: checked ? '#1d4ed8' : '#334155',
+                          borderRadius: 10,
+                          padding: '10px 12px',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleManualStatus(status)}
+                        />
+                        {status}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <label style={{ display: 'grid', gap: 6, fontSize: 12, fontWeight: 800, color: '#334155' }}>
+                Catatan Revisi Manual
+                <textarea
+                  value={manualDraft.manualReason}
+                  onChange={(event) => setManualDraft((draft) => ({ ...draft, manualReason: event.target.value }))}
+                  placeholder="Contoh: Rekening sudah dikonfirmasi ke vendor, nominal sesuai revisi manual."
+                  rows={4}
+                  style={{
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 10,
+                    padding: '10px 12px',
+                    fontSize: 13,
+                    color: '#0f172a',
+                    resize: 'vertical',
+                    outline: 'none',
+                  }}
+                />
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 22, flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary" onClick={resetManualCheck} disabled={savingManualCheck || !manualCheckItem.manualStatusOcr}>
+                Reset Manual
+              </button>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button className="btn btn-secondary" onClick={() => setManualCheckItem(null)} disabled={savingManualCheck}>
+                  Batal
+                </button>
+                <button className="btn btn-primary" onClick={saveManualCheck} disabled={savingManualCheck}>
+                  {savingManualCheck ? <Loader2 size={16} className="pulse" /> : <CheckCircle2 size={16} />}
+                  {savingManualCheck ? 'Menyimpan...' : 'Simpan'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

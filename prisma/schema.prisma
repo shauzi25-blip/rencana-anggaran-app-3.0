@@ -77,6 +77,10 @@ model InvoiceItem {
   totalHarga        Decimal  @db.Decimal(18, 4)
   statusOcr         String?  // 'Valid', 'Selisih', 'Rekening Tidak Valid', 'Tidak Valid', 'pending'
   ocrReason         String?  @db.Text // Separate reason for discrepancy (not mixed with recommendation)
+  manualStatusOcr   String?
+  manualReason      String?  @db.Text
+  manualCheckedAt   DateTime?
+  manualCheckedBy   String?
   recommendationNote String? @db.Text
   marketPrice       Decimal? @db.Decimal(18, 4) // Harga pasar dari AI search
   aiRecommendation  String?  @db.Text // AI recommendation detail

@@ -24,11 +24,36 @@ export function generateApprovalEmail(params: {
     return group.rows.reduce((sum: number, r: any) => sum + Math.max(r.items.length, 1), 0);
   }
 
+  function splitStatus(status?: string | null): string[] {
+    return (status || 'pending').split(', ').map((value) => value.trim()).filter(Boolean);
+  }
+
+  function renderStatusHtml(item: any): string {
+    const effectiveStatus = item.finalStatusOcr || item.manualStatusOcr || item.statusOcr || 'pending';
+    const effectiveReason = item.finalReason || item.manualReason || item.ocrReason || '';
+    const statusHtml = splitStatus(effectiveStatus).map((status) => {
+      if (status === 'Valid' || status === 'match') return '<span style="color:#059669;font-weight:700;">Valid</span>';
+      if (status === 'Selisih' || status === 'discrepancy') return '<span style="color:#ea580c;font-weight:700;">Selisih</span>';
+      if (status === 'Rekening Tidak Valid') return '<span style="color:#92400e;font-weight:700;">Rek. Tidak Valid</span>';
+      if (status === 'Tidak Valid') return '<span style="color:#dc2626;font-weight:700;">Tidak Valid</span>';
+      return '<span style="color:#9ca3af;">Pending</span>';
+    }).join('<br/>');
+
+    const reasonHtml = effectiveReason
+      ? `<br/><span style="font-size:9px;color:#6b7280;font-weight:400;display:block;margin-top:2px;">${effectiveReason}</span>`
+      : '';
+    const manualHtml = item.manualStatusOcr
+      ? '<br/><span style="font-size:9px;color:#1d4ed8;font-weight:700;display:block;margin-top:2px;">Manual Check</span>'
+      : '';
+
+    return statusHtml + reasonHtml + manualHtml;
+  }
+
   // Build company and vendor table rows
   const companyRowsHtml = companyGroups.map((cg: any) => {
     const companyHeader = `
       <tr style="background-color:#1e3a8a;color:white;">
-        <td colspan="15" style="padding:10px 12px;font-weight:700;font-size:12px;">🏛️ ${cg.companyName} — Total PT: ${formatRupiah(cg.subtotalCompany)}</td>
+        <td colspan="16" style="padding:10px 12px;font-weight:700;font-size:12px;">🏛️ ${cg.companyName} — Total PT: ${formatRupiah(cg.subtotalCompany)}</td>
       </tr>`;
 
     let vendorNo = 1;
@@ -78,6 +103,7 @@ export function generateApprovalEmail(params: {
           cells.push(`<td style="padding:5px 8px;text-align:right;font-family:monospace;font-size:11px;">${item.qtyPS > 0 ? formatNumber(item.qtyPS) : '-'}</td>`);
           cells.push(`<td style="padding:5px 8px;text-align:right;font-family:monospace;font-size:11px;">${item.hargaPI > 0 ? formatRupiah(item.hargaPI) : '-'}</td>`);
           cells.push(`<td style="padding:5px 8px;text-align:right;font-family:monospace;font-size:11px;">${item.hargaPS > 0 ? formatRupiah(item.hargaPS) : '-'}</td>`);
+          cells.push(`<td style="padding:5px 8px;text-align:center;font-size:11px;">${renderStatusHtml(item)}</td>`);
 
           const borderStyle = iIndex === itemCount - 1 ? '1px solid #d1d5db' : '1px solid #f3f4f6';
           return `<tr style="border-bottom:${borderStyle};">${cells.join('')}</tr>`;
@@ -91,7 +117,7 @@ export function generateApprovalEmail(params: {
         <tr style="background-color:#eff6ff;font-weight:600;">
           <td colspan="7" style="padding:8px;text-align:right;font-size:12px;">Subtotal ${group.vendorName}:</td>
           <td style="padding:8px;text-align:right;font-family:monospace;font-size:12px;color:#1e40af;">${formatRupiah(group.subtotal)}</td>
-          <td colspan="7" style="padding:8px;"></td>
+          <td colspan="8" style="padding:8px;"></td>
         </tr>`;
 
       return invoiceRowsHtml + subtotalRow;
@@ -160,6 +186,7 @@ export function generateApprovalEmail(params: {
             <th style="padding:8px;text-align:right;font-weight:600;font-size:10px;">Qty PS</th>
             <th style="padding:8px;text-align:right;font-weight:600;font-size:10px;">Harga PI</th>
             <th style="padding:8px;text-align:right;font-weight:600;font-size:10px;">Harga PS</th>
+            <th style="padding:8px;text-align:center;font-weight:600;font-size:10px;">Status Dok.</th>
           </tr>
         </thead>
         <tbody>
@@ -169,7 +196,7 @@ export function generateApprovalEmail(params: {
           <tr style="background:linear-gradient(180deg,#1e3a5f 0%,#1e40af 100%);color:white;font-weight:700;">
             <td colspan="7" style="padding:12px;text-align:right;font-size:14px;">GRAND TOTAL:</td>
             <td style="padding:12px;text-align:right;font-family:monospace;font-size:14px;">${formatRupiah(grandTotal)}</td>
-            <td colspan="7" style="padding:12px;"></td>
+            <td colspan="8" style="padding:12px;"></td>
           </tr>
         </tfoot>
       </table>

@@ -19,6 +19,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
+function splitStatus(status?: string | null) {
+  return (status || 'pending').split(', ').map((s: string) => s.trim()).filter(Boolean);
+}
+
 export default function EmailPage() {
   const { selectedIds, getSelectedRows, invoiceData, rekapGroups, rekapGrandTotal } = useSelectedPIStore();
   const selectedRows = getSelectedRows();
@@ -108,7 +112,9 @@ export default function EmailPage() {
             const isFirstOfVendor = isFirstVendorRow && isFirstItem;
             if (isFirstOfVendor) isFirstVendorRow = false;
 
-            const statusArr = (item.statusOcr || 'pending').split(', ').map((s: string) => s.trim());
+            const effectiveStatus = item.finalStatusOcr || item.manualStatusOcr || item.statusOcr || 'pending';
+            const effectiveReason = item.finalReason || item.manualReason || item.ocrReason || '';
+            const statusArr = splitStatus(effectiveStatus);
             const isDiscrepancy = statusArr.includes('discrepancy') || statusArr.includes('Selisih') || statusArr.includes('Tidak Valid') || statusArr.includes('Rekening Tidak Valid');
             const rowBg = isDiscrepancy ? 'background:#fef2f2;' : '';
 
@@ -148,8 +154,12 @@ export default function EmailPage() {
               return '<span style="color:#9ca3af;">⏳ Pending</span>';
             }).join('<br/>');
 
-            if (isDiscrepancy && item.ocrReason) {
-              finalStatusStr += `<br/><span style="font-size:9px;color:#dc2626;font-weight:400;display:block;margin-top:2px;">${item.ocrReason}</span>`;
+            if (isDiscrepancy && effectiveReason) {
+              finalStatusStr += `<br/><span style="font-size:9px;color:#dc2626;font-weight:400;display:block;margin-top:2px;">${effectiveReason}</span>`;
+            }
+
+            if (item.manualStatusOcr) {
+              finalStatusStr += `<br/><span style="font-size:9px;color:#1d4ed8;font-weight:700;display:block;margin-top:2px;">Manual Check</span>`;
             }
             tableRows += `<td style="padding:5px 8px;font-size:11px;text-align:center;">${finalStatusStr}</td>`;
 

@@ -67,21 +67,31 @@ export async function POST(req: NextRequest) {
 
       const vendorData = compData.vendorsMap.get(vendorName);
 
-      const itemsMapped = inv.items.map(item => ({
-        id: item.id,
-        namaBarang: item.namaBarang,
-        keterangan: item.keterangan || '',
-        qtyPI: item.qtyPI,
-        qtyPS: item.qtyPS,
-        hargaPI: decimalToNumber(item.hargaPI),
-        hargaPS: decimalToNumber(item.hargaPS),
-        statusOcr: item.statusOcr,
-        ocrReason: item.ocrReason || '',
-        rekomendasi: item.recommendationNote || '',
-        priorityScore: item.priorityScore || 0,
-        marketPrice: item.marketPrice ? decimalToNumber(item.marketPrice) : null,
-        referensi: '' // Will be filled by AI validate
-      }));
+      const itemsMapped = inv.items.map(item => {
+        const manualReason = item.manualReason || '';
+        const ocrReason = item.ocrReason || '';
+
+        return {
+          id: item.id,
+          namaBarang: item.namaBarang,
+          keterangan: item.keterangan || '',
+          qtyPI: item.qtyPI,
+          qtyPS: item.qtyPS,
+          hargaPI: decimalToNumber(item.hargaPI),
+          hargaPS: decimalToNumber(item.hargaPS),
+          statusOcr: item.statusOcr,
+          ocrReason,
+          manualStatusOcr: item.manualStatusOcr,
+          manualReason,
+          manualCheckedAt: item.manualCheckedAt?.toISOString() || null,
+          finalStatusOcr: item.manualStatusOcr || item.statusOcr,
+          finalReason: manualReason || ocrReason,
+          rekomendasi: item.recommendationNote || '',
+          priorityScore: item.priorityScore || 0,
+          marketPrice: item.marketPrice ? decimalToNumber(item.marketPrice) : null,
+          referensi: '' // Will be filled by AI validate
+        };
+      });
 
       const row = {
         vendorId: inv.vendorId,
