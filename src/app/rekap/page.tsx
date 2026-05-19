@@ -210,8 +210,11 @@ export default function RekapPage() {
                         ...item, 
                         statusOcr: result.status, 
                         ocrReason: result.ocrReason || '',
-                        finalStatusOcr: item.manualStatusOcr || result.status,
-                        finalReason: item.manualReason || result.ocrReason || '',
+                        manualStatusOcr: null,
+                        manualReason: '',
+                        manualCheckedAt: null,
+                        finalStatusOcr: result.status,
+                        finalReason: result.ocrReason || '',
                         rekomendasi: result.recommendation, 
                         referensi: result.referensi,
                         priorityScore: result.priorityScore || 0,
@@ -608,9 +611,11 @@ export default function RekapPage() {
                               const isFirstOfVendor = isFirstVendorRow && isFirstItemOfInvoice;
                               if (isFirstOfVendor) isFirstVendorRow = false;
 
-                              const statusArr = splitStatus(item.statusOcr);
+                              const finalStatus = item.finalStatusOcr || item.manualStatusOcr || item.statusOcr;
+                              const finalReason = item.finalReason || item.manualReason || item.ocrReason || '';
+                              const statusArr = splitStatus(finalStatus);
                               const manualStatusArr = splitStatus(item.manualStatusOcr);
-                              const isDiscrepancy = hasProblemStatus(item.statusOcr);
+                              const isDiscrepancy = hasProblemStatus(finalStatus);
 
                               return (
                                 <tr
@@ -737,13 +742,13 @@ export default function RekapPage() {
                                             return <span key={sIdx} className="badge on-time"><CheckCircle2 size={12}/> Valid</span>;
                                           } else if (st === 'Rekening Tidak Valid') {
                                             return (
-                                              <span key={sIdx} className="badge" style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', cursor: 'pointer' }} onClick={() => setShowDiscrepancyModal(item.ocrReason || 'Nomor rekening berbeda atau tidak tersedia.')}>
+                                              <span key={sIdx} className="badge" style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', cursor: 'pointer' }} onClick={() => setShowDiscrepancyModal(finalReason || 'Nomor rekening berbeda atau tidak tersedia.')}>
                                                 <AlertCircle size={12}/> Rek. Tidak Valid <Info size={10} style={{ opacity: 0.8 }} />
                                               </span>
                                             );
                                           } else if (st === 'Selisih' || st === 'Tidak Valid' || st === 'discrepancy') {
                                             return (
-                                              <span key={sIdx} className="badge late" style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} onClick={() => setShowDiscrepancyModal(item.ocrReason || 'Ketidaksesuaian terdeteksi.')}>
+                                              <span key={sIdx} className="badge late" style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} onClick={() => setShowDiscrepancyModal(finalReason || 'Ketidaksesuaian terdeteksi.')}>
                                                 <AlertTriangle size={12}/> {st === 'discrepancy' ? 'Selisih' : st} <Info size={10} style={{ opacity: 0.8 }} />
                                               </span>
                                             );
@@ -752,11 +757,17 @@ export default function RekapPage() {
                                           }
                                         })}
                                       </div>
+
+                                      {item.manualStatusOcr && (
+                                        <span style={{ fontSize: 9, color: '#1d4ed8', fontWeight: 800 }}>
+                                          Manual
+                                        </span>
+                                      )}
                                       
                                       {/* Tampilkan reason 1x di bawah gabungan badge */}
-                                      {isDiscrepancy && item.ocrReason && (
-                                        <div style={{ fontSize: 9, color: '#dc2626', marginTop: 2, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.ocrReason}>
-                                          {item.ocrReason.substring(0, 40)}
+                                      {isDiscrepancy && finalReason && (
+                                        <div style={{ fontSize: 9, color: '#dc2626', marginTop: 2, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={finalReason}>
+                                          {finalReason.substring(0, 40)}
                                         </div>
                                       )}
                                     </div>

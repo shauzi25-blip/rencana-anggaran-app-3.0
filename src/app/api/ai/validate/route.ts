@@ -112,7 +112,11 @@ export async function POST(req: NextRequest) {
       where: { id: itemId },
       data: {
         statusOcr: finalStatus,
-        recommendationNote: rekomendasi
+        recommendationNote: rekomendasi,
+        manualStatusOcr: null,
+        manualReason: null,
+        manualCheckedAt: null,
+        manualCheckedBy: null,
       }
     });
 

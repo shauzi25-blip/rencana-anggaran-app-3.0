@@ -367,6 +367,10 @@ Output WAJIB JSON murni tanpa backtick:
               marketPrice: marketPrice,
               aiRecommendation: rekomendasi,
               priorityScore: priorityScore,
+              manualStatusOcr: null,
+              manualReason: null,
+              manualCheckedAt: null,
+              manualCheckedBy: null,
             }
           });
 
