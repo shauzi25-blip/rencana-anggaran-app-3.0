@@ -4,22 +4,20 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
-const ALLOWED_STATUSES = new Set(['Valid', 'Selisih', 'Rekening Tidak Valid', 'Tidak Valid']);
+const RESOLVED_STATUSES = new Set(['Selisih', 'Rekening Tidak Valid', 'Tidak Valid']);
 
-function normalizeManualStatus(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
+function normalizeResolvedStatuses(value: unknown): string[] {
+  const rawStatuses = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : [];
 
-  const statuses = value
-    .split(',')
-    .map((status) => status.trim())
-    .filter(Boolean);
-
-  if (statuses.length === 0) return null;
-  if (statuses.includes('Valid')) return 'Valid';
-
-  const uniqueStatuses = Array.from(new Set(statuses));
-  const isValid = uniqueStatuses.every((status) => ALLOWED_STATUSES.has(status));
-  return isValid ? uniqueStatuses.join(', ') : null;
+  return Array.from(new Set(
+    rawStatuses
+      .map((status) => typeof status === 'string' ? status.trim() : '')
+      .filter((status) => RESOLVED_STATUSES.has(status))
+  ));
 }
 
 export async function PATCH(req: NextRequest) {
@@ -61,21 +59,20 @@ export async function PATCH(req: NextRequest) {
       });
     }
 
-    const manualStatusOcr = normalizeManualStatus(body.manualStatusOcr);
-    const manualReason = typeof body.manualReason === 'string' ? body.manualReason.trim() : '';
-
-    if (!manualStatusOcr) {
-      return NextResponse.json(
-        { success: false, error: 'Status manual tidak valid' },
-        { status: 400 }
-      );
-    }
+    const resolvedStatuses = normalizeResolvedStatuses(body.resolvedStatuses || body.manualStatusOcr);
+    const manualReasonInput = typeof body.manualReason === 'string' ? body.manualReason.trim() : '';
+    const resolvedNote = resolvedStatuses.length > 0
+      ? `Direvisi manual: ${resolvedStatuses.join(', ')}`
+      : 'Direvisi manual';
+    const manualReason = manualReasonInput
+      ? `${resolvedNote}\nCatatan: ${manualReasonInput}`
+      : resolvedNote;
 
     const item = await prisma.invoiceItem.update({
       where: { id: itemId },
       data: {
-        manualStatusOcr,
-        manualReason: manualReason || null,
+        manualStatusOcr: 'Valid',
+        manualReason,
         manualCheckedAt: new Date(),
         manualCheckedBy: 'manual-user',
       },
@@ -93,8 +90,8 @@ export async function PATCH(req: NextRequest) {
       success: true,
       data: {
         ...item,
-        finalStatusOcr: item.manualStatusOcr || item.statusOcr,
-        finalReason: item.manualReason || item.ocrReason || '',
+        finalStatusOcr: 'Valid',
+        finalReason: item.manualReason || '',
       },
     });
   } catch (error) {

@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
       const itemsMapped = inv.items.map(item => {
         const manualReason = item.manualReason || '';
         const ocrReason = item.ocrReason || '';
+        const hasManualCheck = Boolean(item.manualStatusOcr || item.manualCheckedAt);
 
         return {
           id: item.id,
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
           manualStatusOcr: item.manualStatusOcr,
           manualReason,
           manualCheckedAt: item.manualCheckedAt?.toISOString() || null,
-          finalStatusOcr: item.manualStatusOcr || item.statusOcr,
+          finalStatusOcr: hasManualCheck ? 'Valid' : item.statusOcr,
           finalReason: manualReason || ocrReason,
           rekomendasi: item.recommendationNote || '',
           priorityScore: item.priorityScore || 0,

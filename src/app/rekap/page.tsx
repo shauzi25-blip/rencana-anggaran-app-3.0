@@ -70,6 +70,12 @@ export default function RekapPage() {
     return statuses.some((st) => ['discrepancy', 'Selisih', 'Tidak Valid', 'Rekening Tidak Valid'].includes(st));
   };
 
+  const getManualDetailText = (item: any) => {
+    const aiReason = item.ocrReason || 'Tidak ada catatan AI.';
+    const manualReason = item.manualReason || 'Tidak ada catatan manual.';
+    return `Catatan AI:\n${aiReason}\n\nCatatan revisi manual:\n${manualReason}`;
+  };
+
   // Group selected rows by perusahaan for the rekap — only on initial load
   useEffect(() => {
     if (selectedRows.length === 0) return;
@@ -355,7 +361,7 @@ export default function RekapPage() {
     const manualStatuses = splitStatus(item.manualStatusOcr);
     setManualCheckItem(item);
     setManualDraft({
-      isValid: manualStatuses.includes('Valid'),
+      isValid: true,
       selectedStatuses: manualStatuses.filter((status) => manualProblemStatuses.includes(status)),
       manualReason: item.manualReason || '',
     });
@@ -376,7 +382,7 @@ export default function RekapPage() {
                     manualStatusOcr: data.manualStatusOcr || null,
                     manualReason: data.manualReason || '',
                     manualCheckedAt: data.manualCheckedAt || null,
-                    finalStatusOcr: data.finalStatusOcr || data.statusOcr || item.statusOcr,
+                    finalStatusOcr: data.manualStatusOcr || data.manualCheckedAt ? 'Valid' : (data.finalStatusOcr || data.statusOcr || item.statusOcr),
                     finalReason: data.finalReason || data.ocrReason || item.ocrReason || '',
                   }
                 : item
@@ -392,7 +398,7 @@ export default function RekapPage() {
       const exists = draft.selectedStatuses.includes(status);
       return {
         ...draft,
-        isValid: false,
+        isValid: true,
         selectedStatuses: exists
           ? draft.selectedStatuses.filter((value) => value !== status)
           : [...draft.selectedStatuses, status],
@@ -407,12 +413,6 @@ export default function RekapPage() {
   const saveManualCheck = async () => {
     if (!manualCheckItem?.id) return;
 
-    const manualStatusOcr = manualDraft.isValid ? 'Valid' : manualDraft.selectedStatuses.join(', ');
-    if (!manualStatusOcr) {
-      alert('Pilih Tandai Valid atau minimal satu status masalah.');
-      return;
-    }
-
     setSavingManualCheck(true);
     try {
       const res = await fetch('/api/invoice-item/manual-check', {
@@ -420,7 +420,8 @@ export default function RekapPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itemId: manualCheckItem.id,
-          manualStatusOcr,
+          manualStatusOcr: 'Valid',
+          resolvedStatuses: manualDraft.selectedStatuses,
           manualReason: manualDraft.manualReason,
         }),
       });
@@ -611,10 +612,11 @@ export default function RekapPage() {
                               const isFirstOfVendor = isFirstVendorRow && isFirstItemOfInvoice;
                               if (isFirstOfVendor) isFirstVendorRow = false;
 
-                              const finalStatus = item.finalStatusOcr || item.manualStatusOcr || item.statusOcr;
+                              const hasManualCheck = Boolean(item.manualStatusOcr || item.manualCheckedAt);
+                              const finalStatus = hasManualCheck ? 'Valid' : (item.finalStatusOcr || item.statusOcr);
                               const finalReason = item.finalReason || item.manualReason || item.ocrReason || '';
                               const statusArr = splitStatus(finalStatus);
-                              const manualStatusArr = splitStatus(item.manualStatusOcr);
+                              const manualStatusArr = hasManualCheck ? ['Valid'] : splitStatus(item.manualStatusOcr);
                               const isDiscrepancy = hasProblemStatus(finalStatus);
 
                               return (
@@ -739,7 +741,24 @@ export default function RekapPage() {
                                       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4 }}>
                                         {statusArr.map((st: string, sIdx: number) => {
                                           if (st === 'Valid' || st === 'match') {
-                                            return <span key={sIdx} className="badge on-time"><CheckCircle2 size={12}/> Valid</span>;
+                                            return (
+                                              <button
+                                                key={sIdx}
+                                                type="button"
+                                                className="badge on-time"
+                                                onClick={() => hasManualCheck && setShowDiscrepancyModal(getManualDetailText(item))}
+                                                style={{
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: 4,
+                                                  border: 'none',
+                                                  cursor: hasManualCheck ? 'pointer' : 'default',
+                                                }}
+                                              >
+                                                <CheckCircle2 size={12}/> Valid
+                                                {hasManualCheck && <Info size={10} style={{ opacity: 0.8 }} />}
+                                              </button>
+                                            );
                                           } else if (st === 'Rekening Tidak Valid') {
                                             return (
                                               <span key={sIdx} className="badge" style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', cursor: 'pointer' }} onClick={() => setShowDiscrepancyModal(finalReason || 'Nomor rekening berbeda atau tidak tersedia.')}>
@@ -758,7 +777,7 @@ export default function RekapPage() {
                                         })}
                                       </div>
 
-                                      {item.manualStatusOcr && (
+                                      {hasManualCheck && (
                                         <span style={{ fontSize: 9, color: '#1d4ed8', fontWeight: 800 }}>
                                           Manual
                                         </span>
@@ -776,19 +795,22 @@ export default function RekapPage() {
                                   {/* Checking Manual */}
                                   <td style={{ textAlign: 'center', fontSize: 11 }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-                                      {item.manualStatusOcr ? (
+                                      {hasManualCheck ? (
                                         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4 }}>
                                           {manualStatusArr.map((st: string, sIdx: number) => (
-                                            <span
+                                            <button
                                               key={sIdx}
+                                              type="button"
                                               className={st === 'Valid' ? 'badge on-time' : 'badge'}
+                                              onClick={() => hasManualCheck && setShowDiscrepancyModal(getManualDetailText(item))}
                                               style={st === 'Valid'
-                                                ? { fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }
+                                                ? { fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', cursor: 'pointer' }
                                                 : { fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
                                             >
                                               {st === 'Valid' ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
                                               {st === 'Rekening Tidak Valid' ? 'Rek. Tidak Valid' : st}
-                                            </span>
+                                              {st === 'Valid' && <Info size={10} style={{ opacity: 0.8 }} />}
+                                            </button>
                                           ))}
                                         </div>
                                       ) : (
@@ -810,7 +832,7 @@ export default function RekapPage() {
                                           height: 28,
                                           borderRadius: 8,
                                           border: '1px solid #bfdbfe',
-                                          background: item.manualStatusOcr ? '#eff6ff' : '#ffffff',
+                                          background: hasManualCheck ? '#eff6ff' : '#ffffff',
                                           color: '#1d4ed8',
                                           display: 'inline-flex',
                                           alignItems: 'center',
@@ -1126,10 +1148,10 @@ export default function RekapPage() {
           <div className="modal-content" style={{ maxWidth: 450, padding: '24px 28px' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <AlertTriangle size={24} color="#dc2626" />
-              <h3 style={{ margin: 0, color: '#111827', fontSize: 18, fontWeight: 700 }}>Detail Selisih Dokumen</h3>
+              <h3 style={{ margin: 0, color: '#111827', fontSize: 18, fontWeight: 700 }}>Detail Status Dokumen</h3>
             </div>
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '16px', borderRadius: '8px', marginBottom: 24 }}>
-              <p style={{ color: '#b91c1c', fontSize: 14, lineHeight: 1.6, margin: 0, fontWeight: 500 }}>
+              <p style={{ color: '#b91c1c', fontSize: 14, lineHeight: 1.6, margin: 0, fontWeight: 500, whiteSpace: 'pre-line' }}>
                 {showDiscrepancyModal}
               </p>
             </div>
