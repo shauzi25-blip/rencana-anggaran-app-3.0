@@ -15,6 +15,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<RencanaAnggaranRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const { selectedIds, setAllRows } = useSelectedPIStore();
@@ -39,6 +40,15 @@ export default function DashboardPage() {
 
       setData(json.data);
       setAllRows(json.data);
+
+      if (json.meta?.syncStarted) {
+        setSyncNotice('Sync spreadsheet sedang berjalan di background. Data akan dimuat ulang otomatis.');
+        [15000, 45000, 90000].forEach((delay) => {
+          window.setTimeout(() => fetchData(), delay);
+        });
+      } else if (!options?.sync) {
+        setSyncNotice(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal memuat data');
     } finally {
@@ -116,6 +126,25 @@ export default function DashboardPage() {
               <button className="btn btn-secondary btn-sm" onClick={() => fetchData()} style={{ marginLeft: 'auto' }}>
                 Coba Lagi
               </button>
+            </div>
+          )}
+
+          {syncNotice && !error && (
+            <div style={{
+              padding: '14px 18px',
+              backgroundColor: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              borderRadius: 12,
+              marginBottom: 20,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              color: '#1d4ed8',
+              fontSize: 13,
+              fontWeight: 600,
+            }}>
+              <RefreshCw size={18} className="pulse" />
+              {syncNotice}
             </div>
           )}
 

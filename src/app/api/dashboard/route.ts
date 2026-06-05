@@ -2,7 +2,7 @@
 // API Route: Fetch Dashboard Data (Unpaid PIs) from Prisma/Supabase
 // ============================================================
 
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { decimalToNumber } from '@/lib/decimal';
 import { syncGoogleSheetsToSupabase } from '@/lib/sync/googleSheetsSync.mjs';
@@ -16,14 +16,18 @@ export async function GET(request: NextRequest) {
     const shouldSync = request.nextUrl.searchParams.get('sync') === 'true';
 
     if (shouldSync) {
-      await syncGoogleSheetsToSupabase({
-        dryRun: false,
-        newOnly: true,
-        logger: {
-          log: () => undefined,
-          warn: () => undefined,
-          error: () => undefined,
-        },
+      after(async () => {
+        await syncGoogleSheetsToSupabase({
+          dryRun: false,
+          newOnly: true,
+          logger: {
+            log: () => undefined,
+            warn: () => undefined,
+            error: () => undefined,
+          },
+        }).catch((error: unknown) => {
+          console.error('Background dashboard refresh sync failed:', error);
+        });
       });
     }
 
@@ -65,6 +69,7 @@ export async function GET(request: NextRequest) {
       meta: {
         totalPayables: rows.length,
         timestamp: new Date().toISOString(),
+        syncStarted: shouldSync,
       },
     });
   } catch (error) {
