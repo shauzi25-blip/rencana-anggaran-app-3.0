@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     if (shouldSync) {
       await syncGoogleSheetsToSupabase({
         dryRun: false,
-        incremental: true,
+        newOnly: true,
         logger: {
           log: () => undefined,
           warn: () => undefined,

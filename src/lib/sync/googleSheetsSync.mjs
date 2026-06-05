@@ -631,6 +631,34 @@ async function filterChangedInvoices(prisma, plan) {
   };
 }
 
+async function filterNewInvoices(prisma, plan) {
+  const existingInvoiceNumbers = new Set();
+  const invoiceNumbers = plan.invoices.map((invoice) => invoice.noPi);
+
+  for (const chunk of chunkArray(invoiceNumbers, 2000)) {
+    const existingInvoices = await prisma.purchaseInvoice.findMany({
+      where: { noPi: { in: chunk } },
+      select: { noPi: true },
+    });
+
+    for (const invoice of existingInvoices) {
+      existingInvoiceNumbers.add(invoice.noPi);
+    }
+  }
+
+  const newInvoices = plan.invoices.filter((invoice) => !existingInvoiceNumbers.has(invoice.noPi));
+
+  return {
+    ...plan,
+    invoices: newInvoices,
+    counts: {
+      ...plan.counts,
+      invoicesChanged: newInvoices.length,
+      invoicesSkipped: plan.invoices.length - newInvoices.length,
+    },
+  };
+}
+
 async function upsertInvoiceItemsBatch(tx, invoiceItemsByInvoiceId, now) {
   const sourceItems = [];
   const activeKeysByInvoiceId = new Map();
@@ -826,14 +854,17 @@ export async function syncGoogleSheetsToSupabase(options = {}) {
   const startedAt = new Date();
   const dryRun = Boolean(options.dryRun);
   const incremental = Boolean(options.incremental);
+  const newOnly = Boolean(options.newOnly);
   const logger = options.logger ?? console;
   const prisma = options.prisma ?? (dryRun ? null : getPrismaClient());
 
   const sheetRows = await fetchAllSheetRows();
   const fullPlan = buildSyncPlan(sheetRows);
-  const plan = incremental && prisma
-    ? await filterChangedInvoices(prisma, fullPlan)
-    : fullPlan;
+  const plan = newOnly && prisma
+    ? await filterNewInvoices(prisma, fullPlan)
+    : incremental && prisma
+      ? await filterChangedInvoices(prisma, fullPlan)
+      : fullPlan;
   const mutations = createEmptyMutationCounts();
 
   if (dryRun) {
@@ -841,6 +872,7 @@ export async function syncGoogleSheetsToSupabase(options = {}) {
       success: true,
       dryRun: true,
       incremental,
+      newOnly,
       startedAt: startedAt.toISOString(),
       finishedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt.getTime(),
@@ -867,7 +899,7 @@ export async function syncGoogleSheetsToSupabase(options = {}) {
         status: 'running',
         startedAt,
         dryRun: false,
-        message: incremental ? 'Incremental sync dari dashboard refresh' : null,
+        message: newOnly ? 'New-only sync dari dashboard refresh' : incremental ? 'Incremental sync dari dashboard refresh' : null,
         ...toSyncRunSeenData(plan.counts),
       },
     });
@@ -879,6 +911,7 @@ export async function syncGoogleSheetsToSupabase(options = {}) {
       success: true,
       dryRun: false,
       incremental,
+      newOnly,
       syncRunId: syncRun.id,
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
@@ -896,8 +929,10 @@ export async function syncGoogleSheetsToSupabase(options = {}) {
         finishedAt,
         durationMs: result.durationMs,
         ...applied,
-        message: incremental
-          ? `Incremental sync berhasil: ${applied.invoicesUpserted} PI diproses, ${plan.counts.invoicesSkipped || 0} PI dilewati.`
+        message: newOnly
+          ? `New-only sync berhasil: ${applied.invoicesUpserted} PI baru diproses, ${plan.counts.invoicesSkipped || 0} PI lama dilewati.`
+          : incremental
+            ? `Incremental sync berhasil: ${applied.invoicesUpserted} PI diproses, ${plan.counts.invoicesSkipped || 0} PI dilewati.`
           : `Sync berhasil: ${applied.invoicesUpserted} PI dan ${applied.itemsUpserted} item.`,
       },
     });
