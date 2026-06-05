@@ -16,7 +16,15 @@ export async function GET(request: NextRequest) {
     const shouldSync = request.nextUrl.searchParams.get('sync') === 'true';
 
     if (shouldSync) {
-      await syncGoogleSheetsToSupabase({ dryRun: false });
+      await syncGoogleSheetsToSupabase({
+        dryRun: false,
+        incremental: true,
+        logger: {
+          log: () => undefined,
+          warn: () => undefined,
+          error: () => undefined,
+        },
+      });
     }
 
     const rawInvoices = await prisma.purchaseInvoice.findMany({

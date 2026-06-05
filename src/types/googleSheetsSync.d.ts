@@ -3,6 +3,7 @@ declare module '@/lib/sync/googleSheetsSync.mjs' {
 
   export interface GoogleSheetsSyncOptions {
     dryRun?: boolean;
+    incremental?: boolean;
     prisma?: PrismaClient;
     logger?: Pick<Console, 'log' | 'warn' | 'error'>;
   }
@@ -10,6 +11,7 @@ declare module '@/lib/sync/googleSheetsSync.mjs' {
   export interface GoogleSheetsSyncResult {
     success: boolean;
     dryRun: boolean;
+    incremental?: boolean;
     syncRunId?: string;
     startedAt: string;
     finishedAt: string;

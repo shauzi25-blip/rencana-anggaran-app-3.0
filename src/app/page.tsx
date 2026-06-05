@@ -25,7 +25,13 @@ export default function DashboardPage() {
     setSyncing(Boolean(options?.sync));
     try {
       const res = await fetch(options?.sync ? '/api/dashboard?sync=true' : '/api/dashboard');
-      const json = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      const json = contentType.includes('application/json') ? await res.json() : null;
+
+      if (!json) {
+        const text = await res.text().catch(() => '');
+        throw new Error(text || `Server mengembalikan response tidak valid (${res.status})`);
+      }
 
       if (!json.success) {
         throw new Error(json.error || 'Failed to fetch data');

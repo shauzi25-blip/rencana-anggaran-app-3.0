@@ -571,6 +571,66 @@ function chunkArray(values, size) {
   return chunks;
 }
 
+async function filterChangedInvoices(prisma, plan) {
+  const existingInvoicesByNoPi = new Map();
+  const existingItemsBySourceKey = new Map();
+  const invoiceNumbers = plan.invoices.map((invoice) => invoice.noPi);
+  const itemSourceKeys = plan.invoices.flatMap((invoice) => invoice.items.map((item) => item.sourceKey));
+
+  for (const chunk of chunkArray(invoiceNumbers, 2000)) {
+    const existingInvoices = await prisma.purchaseInvoice.findMany({
+      where: { noPi: { in: chunk } },
+      select: {
+        noPi: true,
+        sourceRowHash: true,
+        sourceActive: true,
+      },
+    });
+
+    for (const invoice of existingInvoices) {
+      existingInvoicesByNoPi.set(invoice.noPi, invoice);
+    }
+  }
+
+  for (const chunk of chunkArray(itemSourceKeys, 2000)) {
+    const existingItems = await prisma.invoiceItem.findMany({
+      where: { sourceKey: { in: chunk } },
+      select: {
+        sourceKey: true,
+        sourceRowHash: true,
+        sourceActive: true,
+      },
+    });
+
+    for (const item of existingItems) {
+      existingItemsBySourceKey.set(item.sourceKey, item);
+    }
+  }
+
+  const changedInvoices = plan.invoices.filter((invoice) => {
+    const existingInvoice = existingInvoicesByNoPi.get(invoice.noPi);
+
+    if (!existingInvoice) return true;
+    if (!existingInvoice.sourceActive) return true;
+    if (existingInvoice.sourceRowHash !== invoice.sourceRowHash) return true;
+
+    return invoice.items.some((item) => {
+      const existingItem = existingItemsBySourceKey.get(item.sourceKey);
+      return !existingItem || !existingItem.sourceActive || existingItem.sourceRowHash !== item.sourceRowHash;
+    });
+  });
+
+  return {
+    ...plan,
+    invoices: changedInvoices,
+    counts: {
+      ...plan.counts,
+      invoicesChanged: changedInvoices.length,
+      invoicesSkipped: plan.invoices.length - changedInvoices.length,
+    },
+  };
+}
+
 async function upsertInvoiceItemsBatch(tx, invoiceItemsByInvoiceId, now) {
   const sourceItems = [];
   const activeKeysByInvoiceId = new Map();
@@ -765,17 +825,22 @@ async function applySyncPlan(prisma, plan, now, logger = console) {
 export async function syncGoogleSheetsToSupabase(options = {}) {
   const startedAt = new Date();
   const dryRun = Boolean(options.dryRun);
+  const incremental = Boolean(options.incremental);
   const logger = options.logger ?? console;
   const prisma = options.prisma ?? (dryRun ? null : getPrismaClient());
 
   const sheetRows = await fetchAllSheetRows();
-  const plan = buildSyncPlan(sheetRows);
+  const fullPlan = buildSyncPlan(sheetRows);
+  const plan = incremental && prisma
+    ? await filterChangedInvoices(prisma, fullPlan)
+    : fullPlan;
   const mutations = createEmptyMutationCounts();
 
   if (dryRun) {
     return {
       success: true,
       dryRun: true,
+      incremental,
       startedAt: startedAt.toISOString(),
       finishedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt.getTime(),
@@ -802,6 +867,7 @@ export async function syncGoogleSheetsToSupabase(options = {}) {
         status: 'running',
         startedAt,
         dryRun: false,
+        message: incremental ? 'Incremental sync dari dashboard refresh' : null,
         ...toSyncRunSeenData(plan.counts),
       },
     });
@@ -812,6 +878,7 @@ export async function syncGoogleSheetsToSupabase(options = {}) {
     const result = {
       success: true,
       dryRun: false,
+      incremental,
       syncRunId: syncRun.id,
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
@@ -829,7 +896,9 @@ export async function syncGoogleSheetsToSupabase(options = {}) {
         finishedAt,
         durationMs: result.durationMs,
         ...applied,
-        message: `Sync berhasil: ${applied.invoicesUpserted} PI dan ${applied.itemsUpserted} item.`,
+        message: incremental
+          ? `Incremental sync berhasil: ${applied.invoicesUpserted} PI diproses, ${plan.counts.invoicesSkipped || 0} PI dilewati.`
+          : `Sync berhasil: ${applied.invoicesUpserted} PI dan ${applied.itemsUpserted} item.`,
       },
     });
 
