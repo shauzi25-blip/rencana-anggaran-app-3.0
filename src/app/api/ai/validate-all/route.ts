@@ -10,6 +10,56 @@ export const maxDuration = 60;
 
 const prisma = new PrismaClient();
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientGeminiError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('error fetching') ||
+    lower.includes('fetch failed') ||
+    lower.includes('timeout') ||
+    lower.includes('temporarily') ||
+    lower.includes('unavailable') ||
+    lower.includes('503') ||
+    lower.includes('429')
+  );
+}
+
+function getAiReadErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const lower = message.toLowerCase();
+
+  if (lower.includes('429') || lower.includes('quota') || lower.includes('rate')) {
+    return 'AI sementara terkena limit/rate limit dari Google. Jalankan AI Check Semua ulang beberapa saat lagi.';
+  }
+
+  if (lower.includes('api key') || lower.includes('permission') || lower.includes('403') || lower.includes('401')) {
+    return 'AI belum bisa membaca dokumen karena konfigurasi akses Gemini bermasalah. Cek GEMINI_API_KEY di Vercel.';
+  }
+
+  if (isTransientGeminiError(error)) {
+    return 'AI sementara gagal terhubung ke Google Gemini. Jalankan AI Check Semua ulang beberapa saat lagi.';
+  }
+
+  return 'AI belum berhasil membaca dokumen. Jalankan AI Check Semua ulang atau cek lampiran invoice.';
+}
+
+async function generateGeminiContentWithRetry(model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>, parts: Parameters<ReturnType<GoogleGenerativeAI['getGenerativeModel']>['generateContent']>[0]) {
+  try {
+    return await model.generateContent(parts);
+  } catch (error) {
+    if (!isTransientGeminiError(error)) {
+      throw error;
+    }
+
+    await sleep(750);
+    return model.generateContent(parts);
+  }
+}
+
 function isInvoiceNumberOnlyIssue(reason: string): boolean {
   const lower = reason.toLowerCase();
   const mentionsInvoiceNumber =
@@ -312,7 +362,7 @@ Output WAJIB JSON murni tanpa backtick:
 
                 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
                 
-                const result = await model.generateContent([
+                const result = await generateGeminiContentWithRetry(model, [
                   ocrPrompt,
                   {
                     inlineData: {
@@ -378,8 +428,8 @@ Output WAJIB JSON murni tanpa backtick:
               }
             } catch (aiErr: any) {
               console.warn('Gemini OCR error for item', itemId, aiErr?.message || aiErr);
-              statusOcr = 'Tidak Valid';
-              ocrReason = `Error saat membaca dokumen: ${aiErr?.message?.substring(0, 80) || 'Unknown'}`;
+              statusOcr = 'pending';
+              ocrReason = getAiReadErrorMessage(aiErr);
             }
           } else if (!genAI) {
             statusOcr = 'Valid';

@@ -772,7 +772,26 @@ export default function RekapPage() {
                                               </span>
                                             );
                                           } else {
-                                            return <span key={sIdx} className="badge" style={{ color: '#6b7280', background: '#f3f4f6' }}>Pending</span>;
+                                            return (
+                                              <button
+                                                key={sIdx}
+                                                type="button"
+                                                className="badge"
+                                                onClick={() => finalReason && setShowDiscrepancyModal(finalReason)}
+                                                style={{
+                                                  color: '#475569',
+                                                  background: '#f8fafc',
+                                                  border: '1px solid #e2e8f0',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: 4,
+                                                  cursor: finalReason ? 'pointer' : 'default',
+                                                }}
+                                              >
+                                                <Clock size={12} /> Pending
+                                                {finalReason && <Info size={10} style={{ opacity: 0.8 }} />}
+                                              </button>
+                                            );
                                           }
                                         })}
                                       </div>
