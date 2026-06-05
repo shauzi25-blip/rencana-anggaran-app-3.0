@@ -2,15 +2,23 @@
 // API Route: Fetch Dashboard Data (Unpaid PIs) from Prisma/Supabase
 // ============================================================
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { decimalToNumber } from '@/lib/decimal';
+import { syncGoogleSheetsToSupabase } from '@/lib/sync/googleSheetsSync.mjs';
 
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const shouldSync = request.nextUrl.searchParams.get('sync') === 'true';
+
+    if (shouldSync) {
+      await syncGoogleSheetsToSupabase({ dryRun: false });
+    }
+
     const rawInvoices = await prisma.purchaseInvoice.findMany({
       where: {
         paymentState: { not: 'paid' }, // assuming 'paid' is fully paid

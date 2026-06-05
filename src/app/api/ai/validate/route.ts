@@ -76,11 +76,12 @@ export async function POST(req: NextRequest) {
             Gambar/PDF yang saya berikan adalah dokumen asli invoice/tagihan dari vendor.
             Nomor PI sudah divalidasi oleh sistem dari judul file Google Drive.
             Jangan validasi nomor invoice/nomor PI dari isi gambar/PDF.
-            Abaikan tulisan nomor invoice pada dokumen, termasuk jika tulisan tangan sulit dibaca.
-            Cek apakah di dalam dokumen ini terdapat barang dengan deskripsi yang cocok/mendekati "${item.namaBarang}", dengan kuantitas: ${item.qtyPI}, dan harga: Rp${formatDecimal(item.hargaPI)}.
+            Jangan validasi nama barang, qty/jumlah barang, atau nomor rekening.
+            Fokus HANYA pada pencocokan Harga PI data: Rp${formatDecimal(item.hargaPI)}.
             
-            Jika terdapat selisih jumlah kuantitas, atau selisih harga yang cukup mencurigakan antara gambar dengan deskripsi saya, JAWAB HANYA DENGAN KATA "DISCREPANCY". 
-            Jika angkanya wajar atau cocok, JAWAB HANYA DENGAN KATA "MATCH".
+            Jika ada angka harga di dokumen yang sama atau mendekati Harga PI data dengan toleransi Rp 2.000, JAWAB HANYA DENGAN KATA "MATCH".
+            Jika semua angka harga yang relevan berbeda lebih dari Rp 2.000, JAWAB HANYA DENGAN KATA "DISCREPANCY".
+            Jika ragu karena banyak angka, pilih angka yang paling dekat dengan Harga PI data.
           `;
 
           const result = await model.generateContent([

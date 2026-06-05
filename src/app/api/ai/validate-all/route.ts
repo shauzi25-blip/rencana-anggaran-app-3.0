@@ -229,7 +229,7 @@ Jika tidak bisa memperkirakan, kembalikan: {"estimatedPrice": 0, "source": "unkn
                 const bankAccount = item.invoice.vendor.bankAccount || '';
                 const bankName = item.invoice.vendor.bankName || '';
                 
-                const ocrPrompt = `Tugas Anda memvalidasi data invoice. Nomor PI sudah divalidasi oleh sistem dari judul file Google Drive sebelum dokumen ini dikirim ke AI.
+                let ocrPrompt = `Tugas Anda memvalidasi data invoice. Nomor PI sudah divalidasi oleh sistem dari judul file Google Drive sebelum dokumen ini dikirim ke AI.
 
 PENTING:
 - Jangan validasi nomor invoice/nomor PI dari isi dokumen.
@@ -277,6 +277,39 @@ Output WAJIB JSON murni tanpa backtick:
   "reason": "Kosongkan jika Valid. Jika ada masalah item/qty/total/rekening, gabungkan penjelasannya lebih spesifik maks 60 kata. Jangan menulis alasan terkait nomor invoice tidak ditemukan."
 }`;
 
+                ocrPrompt = `Tugas Anda memvalidasi data invoice. Nomor PI sudah divalidasi oleh sistem dari judul file Google Drive sebelum dokumen ini dikirim ke AI.
+
+PENTING:
+- Jangan validasi nomor invoice/nomor PI dari isi dokumen.
+- Jangan validasi nama barang dari isi dokumen.
+- Jangan validasi qty/jumlah barang dari isi dokumen.
+- Jangan baca atau validasi nomor rekening dari isi dokumen.
+- Fokus validasi HANYA pada Harga PI.
+
+Data yang harus dibandingkan dengan isi dokumen:
+- No PI referensi sistem: ${piNumber}
+- Harga PI pada data: Rp${formatDecimal(item.hargaPI)}
+
+Validasi dengan ketentuan berikut:
+1. Cari angka harga pada dokumen invoice yang sama atau paling mendekati Harga PI data.
+2. Abaikan nama barang, deskripsi item, qty, total item, subtotal, PPN, grand total, dan nomor rekening.
+3. Gunakan toleransi selisih Rp 2.000.
+   - Jika ada harga pada dokumen dengan selisih <= Rp 2.000 dari Harga PI data, status ["Valid"].
+   - Jika harga yang ditemukan selisih > Rp 2.000 dari Harga PI data, status ["Selisih"].
+   - Jika dokumen benar-benar tidak bisa dibaca sama sekali, status ["Tidak Valid"].
+4. Jika ragu karena ada banyak angka, pilih angka yang paling dekat dengan Harga PI data.
+
+Aturan output:
+1. Output status hanya boleh ["Valid"], ["Selisih"], atau ["Tidak Valid"].
+2. Jangan pernah mengembalikan "Rekening Tidak Valid".
+3. Jangan memberi alasan tentang nama barang, qty, rekening, atau nomor invoice.
+
+Output WAJIB JSON murni tanpa backtick:
+{
+  "statuses": ["Valid"] atau ["Selisih"] atau ["Tidak Valid"],
+  "reason": "Kosongkan jika Valid. Jika Selisih, jelaskan singkat harga data dan harga yang terbaca. Jangan menulis alasan terkait nama barang, qty, rekening, atau nomor invoice."
+}`;
+
                 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
                 
                 const result = await model.generateContent([
@@ -299,7 +332,7 @@ Output WAJIB JSON murni tanpa backtick:
                   if (!Array.isArray(parsedStatuses)) parsedStatuses = [parsedStatuses];
                   
                   // Filter valid combinations
-                  const validSet = new Set(['Valid', 'Selisih', 'Rekening Tidak Valid', 'Tidak Valid']);
+                  const validSet = new Set(['Valid', 'Selisih', 'Tidak Valid']);
                   let finalStatuses = parsedStatuses.filter((s: string) => validSet.has(s));
                   
                   if (finalStatuses.length === 0) finalStatuses = ['Valid'];
@@ -322,9 +355,6 @@ Output WAJIB JSON murni tanpa backtick:
                 } catch {
                   console.log('Failed to parse Gemini OCR JSON:', ocrText);
                   let tempStatuses = [];
-                  if (ocrText.toLowerCase().includes('rekening tidak valid') || ocrText.toLowerCase().includes('rekening berbeda')) {
-                    tempStatuses.push('Rekening Tidak Valid');
-                  } 
                   if (ocrText.toLowerCase().includes('selisih')) {
                     tempStatuses.push('Selisih');
                   }

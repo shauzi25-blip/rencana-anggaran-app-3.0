@@ -14,15 +14,17 @@ import Link from 'next/link';
 export default function DashboardPage() {
   const [data, setData] = useState<RencanaAnggaranRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const { selectedIds, setAllRows } = useSelectedPIStore();
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (options?: { sync?: boolean }) => {
     setLoading(true);
     setError(null);
+    setSyncing(Boolean(options?.sync));
     try {
-      const res = await fetch('/api/dashboard');
+      const res = await fetch(options?.sync ? '/api/dashboard?sync=true' : '/api/dashboard');
       const json = await res.json();
 
       if (!json.success) {
@@ -35,6 +37,7 @@ export default function DashboardPage() {
       setError(err instanceof Error ? err.message : 'Gagal memuat data');
     } finally {
       setLoading(false);
+      setSyncing(false);
     }
   }, [setAllRows]);
 
@@ -57,12 +60,12 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <button
               className="btn btn-secondary"
-              onClick={fetchData}
+              onClick={() => fetchData({ sync: true })}
               disabled={loading}
               id="refresh-data-btn"
             >
               <RefreshCw size={16} className={loading ? 'pulse' : ''} />
-              Refresh
+              {syncing ? 'Sync Spreadsheet...' : 'Refresh'}
             </button>
             <button
               className="btn btn-secondary"
@@ -104,7 +107,7 @@ export default function DashboardPage() {
                 <div style={{ fontWeight: 600, color: '#991b1b' }}>Error</div>
                 <div style={{ fontSize: 13, color: '#dc2626' }}>{error}</div>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={fetchData} style={{ marginLeft: 'auto' }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => fetchData()} style={{ marginLeft: 'auto' }}>
                 Coba Lagi
               </button>
             </div>
@@ -114,7 +117,9 @@ export default function DashboardPage() {
           {loading ? (
             <div className="glass-card" style={{ padding: 60, textAlign: 'center' }}>
               <div className="spinner" style={{ margin: '0 auto 16px' }} />
-              <p style={{ color: '#6b7280', fontSize: 14 }}>Memuat data dari database...</p>
+              <p style={{ color: '#6b7280', fontSize: 14 }}>
+                {syncing ? 'Sync Google Spreadsheet ke Supabase...' : 'Memuat data dari database...'}
+              </p>
             </div>
           ) : (
             /* Data Table */
