@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import ItemHistoryModal from '@/components/ItemHistoryModal';
 import { useSelectedPIStore } from '@/store/useSelectedPI';
 import { formatRupiah, formatNumber } from '@/lib/format';
+import { exportRekapToExcel } from '@/lib/exportRekapExcel';
 import type { InvoiceFile } from '@/types/finance';
 import {
   ArrowLeft,
@@ -35,6 +36,7 @@ export default function RekapPage() {
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [invoiceSearched, setInvoiceSearched] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [excelLoading, setExcelLoading] = useState(false);
   const [aiAllLoading, setAiAllLoading] = useState(false);
   const [aiProgress, setAiProgress] = useState('');
   const [bankInfoModalRow, setBankInfoModalRow] = useState<any | null>(null);
@@ -284,6 +286,18 @@ export default function RekapPage() {
       setPdfLoading(false);
     }
   }, [companyGroups, grandTotal, selectedRows.length]);
+
+  const downloadExcel = useCallback(async () => {
+    setExcelLoading(true);
+    try {
+      await exportRekapToExcel(companyGroups, grandTotal);
+    } catch (err) {
+      console.error('Error generating Excel:', err);
+      alert('Gagal membuat file Excel');
+    } finally {
+      setExcelLoading(false);
+    }
+  }, [companyGroups, grandTotal]);
 
   function countTotalItemRows(group: any): number {
     return group.rows.reduce((sum: number, row: any) => sum + Math.max(row.items.length, 1), 0);
@@ -570,6 +584,10 @@ export default function RekapPage() {
             <button className="btn btn-secondary" onClick={downloadPDF} disabled={pdfLoading || companyGroups.length === 0}>
               {pdfLoading ? <Loader2 size={16} className="pulse" /> : <Download size={16} />}
               {pdfLoading ? 'Generating...' : 'Download PDF'}
+            </button>
+            <button className="btn btn-secondary" onClick={downloadExcel} disabled={excelLoading || companyGroups.length === 0}>
+              {excelLoading ? <Loader2 size={16} className="pulse" /> : <Download size={16} />}
+              {excelLoading ? 'Generating Excel...' : 'Download Excel'}
             </button>
             {invoiceSearched && (
               <Link href="/email" className="btn btn-success" id="next-email-btn">
