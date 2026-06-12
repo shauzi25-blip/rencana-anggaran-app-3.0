@@ -16,7 +16,7 @@ function isAuthorized(request: NextRequest): boolean {
   return getRequestToken(request) === expectedSecret;
 }
 
-async function runSync(request: NextRequest, dryRunOverride?: boolean) {
+async function runSync(request: NextRequest, dryRunOverride?: boolean, defaultMode?: 'full' | 'incremental' | 'new-only') {
   if (!isAuthorized(request)) {
     return NextResponse.json(
       { success: false, error: 'SYNC_SECRET/CRON_SECRET tidak valid atau belum dikonfigurasi' },
@@ -25,7 +25,12 @@ async function runSync(request: NextRequest, dryRunOverride?: boolean) {
   }
 
   const dryRun = dryRunOverride ?? request.nextUrl.searchParams.get('dryRun') === 'true';
-  const result = await syncGoogleSheetsToSupabase({ dryRun });
+  const mode = request.nextUrl.searchParams.get('mode') || defaultMode || 'full';
+  const result = await syncGoogleSheetsToSupabase({
+    dryRun,
+    incremental: mode === 'incremental',
+    newOnly: mode === 'new-only' || mode === 'newOnly',
+  });
 
   return NextResponse.json(result);
 }
@@ -47,7 +52,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    return await runSync(request, false);
+    return await runSync(request, false, 'new-only');
   } catch (error) {
     console.error('Google Sheets sync failed:', error);
     return NextResponse.json(

@@ -289,6 +289,31 @@ export default function RekapPage() {
     return group.rows.reduce((sum: number, row: any) => sum + Math.max(row.items.length, 1), 0);
   }
 
+  function getVisibleItems(row: any) {
+    if (row.items.length > 0) return row.items;
+
+    return [{
+      id: `empty-${row.invoiceId}`,
+      isPlaceholder: true,
+      namaBarang: 'Item belum tersedia di RAW - PI',
+      keterangan: 'PI ini belum memiliki baris item aktif dari spreadsheet.',
+      qtyPI: 0,
+      qtyPS: 0,
+      hargaPI: 0,
+      hargaPS: 0,
+      statusOcr: 'pending',
+      finalStatusOcr: 'pending',
+      finalReason: 'Data item belum tersedia, sehingga AI check belum bisa dijalankan untuk PI ini.',
+      manualStatusOcr: null,
+      manualReason: '',
+      manualCheckedAt: null,
+      rekomendasi: '',
+      priorityScore: 0,
+      marketPrice: null,
+      referensi: '',
+    }];
+  }
+
   // Open Item History Modal
   const openHistoryModal = (namaBarang: string, hargaPI?: number) => {
     setSelectedItemName(namaBarang);
@@ -605,13 +630,15 @@ export default function RekapPage() {
                           let isFirstVendorRow = true;
 
                           return group.rows.map((row: any, rIndex: number) => {
-                            const itemCount = Math.max(row.items.length, 1);
+                            const visibleItems = getVisibleItems(row);
+                            const itemCount = visibleItems.length;
 
-                            return row.items.map((item: any, iIndex: number) => {
+                            return visibleItems.map((item: any, iIndex: number) => {
                               const isFirstItemOfInvoice = iIndex === 0;
                               const isFirstOfVendor = isFirstVendorRow && isFirstItemOfInvoice;
                               if (isFirstOfVendor) isFirstVendorRow = false;
 
+                              const isPlaceholderItem = Boolean(item.isPlaceholder);
                               const hasManualCheck = Boolean(item.manualStatusOcr || item.manualCheckedAt);
                               const finalStatus = hasManualCheck ? 'Valid' : (item.finalStatusOcr || item.statusOcr);
                               const finalReason = item.finalReason || item.manualReason || item.ocrReason || '';
@@ -814,7 +841,9 @@ export default function RekapPage() {
                                   {/* Checking Manual */}
                                   <td style={{ textAlign: 'center', fontSize: 11 }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-                                      {hasManualCheck ? (
+                                      {isPlaceholderItem ? (
+                                        <span style={{ color: '#9ca3af', fontSize: 10 }}>-</span>
+                                      ) : hasManualCheck ? (
                                         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4 }}>
                                           {manualStatusArr.map((st: string, sIdx: number) => (
                                             <button
@@ -842,31 +871,33 @@ export default function RekapPage() {
                                         </div>
                                       )}
 
-                                      <button
-                                        type="button"
-                                        onClick={() => openManualCheckModal(item)}
-                                        title="Edit checking manual"
-                                        style={{
-                                          width: 28,
-                                          height: 28,
-                                          borderRadius: 8,
-                                          border: '1px solid #bfdbfe',
-                                          background: hasManualCheck ? '#eff6ff' : '#ffffff',
-                                          color: '#1d4ed8',
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          cursor: 'pointer',
-                                        }}
-                                      >
-                                        <Pencil size={13} />
-                                      </button>
+                                      {!isPlaceholderItem && (
+                                        <button
+                                          type="button"
+                                          onClick={() => openManualCheckModal(item)}
+                                          title="Edit checking manual"
+                                          style={{
+                                            width: 28,
+                                            height: 28,
+                                            borderRadius: 8,
+                                            border: '1px solid #bfdbfe',
+                                            background: hasManualCheck ? '#eff6ff' : '#ffffff',
+                                            color: '#1d4ed8',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                          }}
+                                        >
+                                          <Pencil size={13} />
+                                        </button>
+                                      )}
                                     </div>
                                   </td>
 
                                   {/* Prioritas */}
                                   <td style={{ textAlign: 'center', fontSize: 10 }}>
-                                    {renderPriorityBadge(item.priorityScore || 0)}
+                                    {isPlaceholderItem ? '-' : renderPriorityBadge(item.priorityScore || 0)}
                                   </td>
 
                                   {/* Rekomendasi */}
@@ -882,7 +913,7 @@ export default function RekapPage() {
                                           Pasar: {formatRupiah(item.marketPrice)}
                                         </div>
                                       )}
-                                      {item.namaBarang && item.namaBarang !== '-' ? (
+                                      {!isPlaceholderItem && item.namaBarang && item.namaBarang !== '-' ? (
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
@@ -922,7 +953,7 @@ export default function RekapPage() {
 
                                   {/* Referensi Harga (Static search links) */}
                                   <td style={{ fontSize: 10, verticalAlign: 'middle' }}>
-                                    {item.namaBarang && item.namaBarang !== '-' ? (
+                                    {!isPlaceholderItem && item.namaBarang && item.namaBarang !== '-' ? (
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                         <a
                                           href={`https://www.tokopedia.com/search?q=${encodeURIComponent(item.namaBarang)}`}

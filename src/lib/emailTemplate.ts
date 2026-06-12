@@ -24,6 +24,25 @@ export function generateApprovalEmail(params: {
     return group.rows.reduce((sum: number, r: any) => sum + Math.max(r.items.length, 1), 0);
   }
 
+  function getVisibleItems(row: any) {
+    if (row.items.length > 0) return row.items;
+
+    return [{
+      namaBarang: 'Item belum tersedia di RAW - PI',
+      keterangan: 'PI ini belum memiliki baris item aktif dari spreadsheet.',
+      qtyPI: 0,
+      qtyPS: 0,
+      hargaPI: 0,
+      hargaPS: 0,
+      finalStatusOcr: 'pending',
+      finalReason: 'Data item belum tersedia, sehingga AI check belum bisa dijalankan untuk PI ini.',
+      manualStatusOcr: null,
+      manualReason: '',
+      ocrReason: '',
+      priorityScore: 0,
+    }];
+  }
+
   function splitStatus(status?: string | null): string[] {
     return (status || 'pending').split(', ').map((value) => value.trim()).filter(Boolean);
   }
@@ -62,9 +81,10 @@ export function generateApprovalEmail(params: {
       let isFirstVendorRow = true;
 
       const invoiceRowsHtml = group.rows.map((row: any) => {
-        const itemCount = Math.max(row.items.length, 1);
+        const visibleItems = getVisibleItems(row);
+        const itemCount = visibleItems.length;
 
-        const itemRowsHtml = row.items.map((item: any, iIndex: number) => {
+        const itemRowsHtml = visibleItems.map((item: any, iIndex: number) => {
           const isFirstItem = iIndex === 0;
           const isFirstOfVendor = isFirstVendorRow && isFirstItem;
           if (isFirstOfVendor) isFirstVendorRow = false;

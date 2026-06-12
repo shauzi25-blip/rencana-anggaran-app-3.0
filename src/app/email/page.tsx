@@ -105,13 +105,31 @@ export default function EmailPage() {
 
         vg.rows?.forEach((row: any) => {
           const items = row.items || [];
-          const itemCount = Math.max(items.length, 1);
+          const visibleItems = items.length > 0 ? items : [{
+            namaBarang: 'Item belum tersedia di RAW - PI',
+            keterangan: 'PI ini belum memiliki baris item aktif dari spreadsheet.',
+            qtyPI: 0,
+            qtyPS: 0,
+            hargaPI: 0,
+            hargaPS: 0,
+            finalStatusOcr: 'pending',
+            finalReason: 'Data item belum tersedia, sehingga AI check belum bisa dijalankan untuk PI ini.',
+            manualStatusOcr: null,
+            manualReason: '',
+            ocrReason: '',
+            rekomendasi: '',
+            priorityScore: 0,
+            marketPrice: null,
+            isPlaceholder: true,
+          }];
+          const itemCount = visibleItems.length;
 
-          items.forEach((item: any, idx: number) => {
+          visibleItems.forEach((item: any, idx: number) => {
             const isFirstItem = idx === 0;
             const isFirstOfVendor = isFirstVendorRow && isFirstItem;
             if (isFirstOfVendor) isFirstVendorRow = false;
 
+            const isPlaceholderItem = Boolean(item.isPlaceholder);
             const effectiveStatus = item.finalStatusOcr || item.manualStatusOcr || item.statusOcr || 'pending';
             const effectiveReason = item.finalReason || item.manualReason || item.ocrReason || '';
             const statusArr = splitStatus(effectiveStatus);
@@ -171,13 +189,13 @@ export default function EmailPage() {
             const rekomText = item.rekomendasi && item.rekomendasi.trim() !== '' 
               ? item.rekomendasi.split('|')[0]?.trim()?.substring(0, 80) + (item.rekomendasi.length > 80 ? '...' : '') 
               : '-';
-            const detailLink = item.namaBarang && item.namaBarang !== '-'
+            const detailLink = !isPlaceholderItem && item.namaBarang && item.namaBarang !== '-'
               ? `<br/><a href="${baseUrl}/history?item=${encodeURIComponent(item.namaBarang)}&price=${item.hargaPI || 0}" target="_blank" style="display:inline-block;margin-top:6px;padding:4px 8px;background:#f0fdfa;color:#0f766e;text-decoration:none;font-weight:600;border-radius:6px;border:1px solid #99f6e4;font-size:10px;">📋 Cek Histori</a>`
               : '';
             tableRows += `<td style="padding:5px 8px;font-size:10px;color:#374151;max-width:200px;">${rekomText}${item.marketPrice > 0 ? `<br/><span style="color:#059669;font-weight:600;margin-top:4px;display:block;">Pasar: ${formatRupiah(item.marketPrice)}</span>` : ''}${detailLink}</td>`;
 
             // Referensi Harga
-            if (item.namaBarang && item.namaBarang !== '-') {
+            if (!isPlaceholderItem && item.namaBarang && item.namaBarang !== '-') {
               tableRows += `<td style="padding:5px 8px;font-size:10px;vertical-align:middle;"><a href="https://www.tokopedia.com/search?q=${encodeURIComponent(item.namaBarang)}" target="_blank" style="color:#059669;text-decoration:none;font-weight:600;">Tokopedia</a><br/><a href="https://shopee.co.id/search?keyword=${encodeURIComponent(item.namaBarang)}" target="_blank" style="color:#ea580c;text-decoration:none;font-weight:600;">Shopee</a></td>`;
             } else {
               tableRows += `<td style="padding:5px 8px;font-size:10px;color:#9ca3af;">-</td>`;
@@ -193,8 +211,8 @@ export default function EmailPage() {
 
             tableRows += `</tr>`;
           });
-          rowNum++;
         });
+        rowNum++;
       });
     });
 

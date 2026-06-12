@@ -36,5 +36,10 @@ declare module '@/lib/sync/googleSheetsSync.mjs' {
 
   export function getLatestSyncRun(options?: { prisma?: PrismaClient }): Promise<SyncRun | null>;
 
+  export function markStaleSyncRuns(options?: {
+    prisma?: PrismaClient;
+    staleAfterMs?: number;
+  }): Promise<{ count: number }>;
+
   export function disconnectSyncPrisma(): Promise<void>;
 }

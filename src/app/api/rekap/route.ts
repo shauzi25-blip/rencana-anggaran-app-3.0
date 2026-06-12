@@ -19,6 +19,10 @@ export async function POST(req: NextRequest) {
     }
 
     const piIds = selectedRows.map((r: any) => r.id);
+    const piOrder = new Map<string, number>();
+    selectedRows.forEach((r: any, index: number) => {
+      piOrder.set(r.id, index);
+    });
 
     // Fetch invoices with relations
     const invoices = await prisma.purchaseInvoice.findMany({
@@ -43,7 +47,11 @@ export async function POST(req: NextRequest) {
     const companyGroupsMap = new Map<string, any>();
     let grandTotal = 0;
 
-    invoices.forEach(inv => {
+    const orderedInvoices = invoices.sort((a, b) => {
+      return (piOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (piOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER);
+    });
+
+    orderedInvoices.forEach(inv => {
       // Use the override from the dropdown if available, otherwise use DB company
       const companyName = companyOverride[inv.id] || inv.company.name;
       const vendorName = inv.vendor.name;

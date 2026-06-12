@@ -894,6 +894,8 @@ export async function syncGoogleSheetsToSupabase(options = {}) {
 
   let syncRun = null;
   try {
+    await markStaleSyncRuns({ prisma });
+
     syncRun = await prisma.syncRun.create({
       data: {
         status: 'running',
@@ -957,8 +959,28 @@ export async function syncGoogleSheetsToSupabase(options = {}) {
   }
 }
 
+export async function markStaleSyncRuns(options = {}) {
+  const prisma = options.prisma ?? getPrismaClient();
+  const staleAfterMs = Number(options.staleAfterMs ?? 30 * 60 * 1000);
+  const staleBefore = new Date(Date.now() - staleAfterMs);
+
+  return prisma.syncRun.updateMany({
+    where: {
+      status: 'running',
+      startedAt: { lt: staleBefore },
+    },
+    data: {
+      status: 'failed',
+      finishedAt: new Date(),
+      error: `Sync tidak selesai dalam ${Math.round(staleAfterMs / 60000)} menit dan ditandai stale otomatis.`,
+      message: 'Stale sync run dibersihkan otomatis.',
+    },
+  });
+}
+
 export async function getLatestSyncRun(options = {}) {
   const prisma = options.prisma ?? getPrismaClient();
+  await markStaleSyncRuns({ prisma });
 
   return prisma.syncRun.findFirst({
     orderBy: { startedAt: 'desc' },
