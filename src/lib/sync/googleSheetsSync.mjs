@@ -632,21 +632,33 @@ async function filterChangedInvoices(prisma, plan) {
 }
 
 async function filterNewInvoices(prisma, plan) {
-  const existingInvoiceNumbers = new Set();
+  const existingInvoicesByNoPi = new Map();
   const invoiceNumbers = plan.invoices.map((invoice) => invoice.noPi);
 
   for (const chunk of chunkArray(invoiceNumbers, 2000)) {
     const existingInvoices = await prisma.purchaseInvoice.findMany({
       where: { noPi: { in: chunk } },
-      select: { noPi: true },
+      select: {
+        noPi: true,
+        items: {
+          where: { sourceActive: true },
+          select: { id: true },
+          take: 1,
+        },
+      },
     });
 
     for (const invoice of existingInvoices) {
-      existingInvoiceNumbers.add(invoice.noPi);
+      existingInvoicesByNoPi.set(invoice.noPi, invoice);
     }
   }
 
-  const newInvoices = plan.invoices.filter((invoice) => !existingInvoiceNumbers.has(invoice.noPi));
+  const newInvoices = plan.invoices.filter((invoice) => {
+    const existingInvoice = existingInvoicesByNoPi.get(invoice.noPi);
+    if (!existingInvoice) return true;
+
+    return invoice.items.length > 0 && existingInvoice.items.length === 0;
+  });
 
   return {
     ...plan,
