@@ -9,6 +9,12 @@ export function toFiniteNumber(value: unknown): number {
   if (value === null || value === undefined || value === '') return 0;
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
   if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (/^-?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test(trimmed.replace(/\s+/g, ''))) {
+      const parsed = Number(trimmed.replace(',', '.'));
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
     const normalized = value.replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.');
     const parsed = Number(normalized);
     return Number.isFinite(parsed) ? parsed : 0;

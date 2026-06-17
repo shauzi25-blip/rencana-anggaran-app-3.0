@@ -121,7 +121,17 @@ function normalizeDecimalString(value) {
     value && typeof value === 'object' && typeof value.toString === 'function'
       ? value.toString()
       : value;
-  const raw = toText(stringValue).replace(/[^\d,.-]/g, '');
+  const textValue = toText(stringValue);
+  const scientificMatch = textValue
+    .replace(/\s+/g, '')
+    .match(/^-?\d+(?:[.,]\d+)?e[+-]?\d+$/i);
+
+  if (scientificMatch) {
+    const parsed = Number(textValue.replace(',', '.'));
+    return Number.isFinite(parsed) ? String(parsed) : '0';
+  }
+
+  const raw = textValue.replace(/[^\d,.-]/g, '');
   if (!raw) return '0';
 
   const isNegative = raw.startsWith('-');
@@ -155,6 +165,10 @@ function normalizeDecimalString(value) {
   }
 
   return `${isNegative ? '-' : ''}${normalized}`;
+}
+
+function isScientificNumber(value) {
+  return /^-?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test(toText(value).replace(/\s+/g, ''));
 }
 
 const toNumber = (value, fallback = 0) => {
@@ -315,6 +329,8 @@ function parsePayables(rows) {
     const companyCode = toText(getCell(row, headerMap, ['Company'], PAYABLE.COMPANY));
     const transactionAt = parseSheetDate(getCell(row, headerMap, ['Transaction At'], PAYABLE.TRANSACTION_AT));
     const dueAt = parseSheetDate(getCell(row, headerMap, ['Due At'], PAYABLE.DUE_AT));
+    const payableAmountRaw = getCell(row, headerMap, ['Payable Amount'], PAYABLE.PAYABLE_AMOUNT);
+    const payableDueRaw = getCell(row, headerMap, ['Payable due', 'Payable Due'], PAYABLE.PAYABLE_DUE);
 
     return {
       rowNumber: index + 2,
@@ -327,8 +343,10 @@ function parsePayables(rows) {
       dueAt,
       tempoHari: deriveTempoHari(transactionAt, dueAt, getCell(row, headerMap, ['Due In'], PAYABLE.DUE_IN)),
       paymentState: toText(getCell(row, headerMap, ['Payment state', 'Payment State'], PAYABLE.PAYMENT_STATE)).toLowerCase() || 'unpaid',
-      totalRencanaBayar: toDecimal(getCell(row, headerMap, ['Payable Amount'], PAYABLE.PAYABLE_AMOUNT)),
-      hutang: toDecimal(getCell(row, headerMap, ['Payable due', 'Payable Due'], PAYABLE.PAYABLE_DUE)),
+      totalRencanaBayar: toDecimal(payableAmountRaw),
+      hutang: toDecimal(payableDueRaw),
+      totalRencanaBayarIsScientific: isScientificNumber(payableAmountRaw),
+      hutangIsScientific: isScientificNumber(payableDueRaw),
       sourceRowHash: rowHash(row),
     };
   }).filter((row) => row.noPi);
@@ -449,6 +467,11 @@ function buildSyncPlan(sheetRows) {
     const firstItem = items[0];
     const totalFromItems = items.reduce((sum, item) => sum.plus(item.totalHarga), new Prisma.Decimal(0));
     const fallbackTotal = firstItem.totalRencanaBayar.gt(0) ? firstItem.totalRencanaBayar : totalFromItems;
+    const shouldUseItemTotalForPayable =
+      existing &&
+      existing.paymentState === 'unpaid' &&
+      totalFromItems.gt(0) &&
+      (existing.totalRencanaBayarIsScientific || existing.hutangIsScientific);
 
     const invoice = existing ?? {
       noPi,
@@ -471,6 +494,8 @@ function buildSyncPlan(sheetRows) {
     if (!invoice.tglBeli && firstItem.tglBeli) invoice.tglBeli = firstItem.tglBeli;
     if (!invoice.tglFaktur && firstItem.tglFaktur) invoice.tglFaktur = firstItem.tglFaktur;
     if (invoice.totalRencanaBayar.equals(0) && fallbackTotal.gt(0)) invoice.totalRencanaBayar = fallbackTotal;
+    if (shouldUseItemTotalForPayable && existing.totalRencanaBayarIsScientific) invoice.totalRencanaBayar = totalFromItems;
+    if (shouldUseItemTotalForPayable && existing.hutangIsScientific) invoice.hutang = totalFromItems;
 
     invoice.items = items.map((item, itemIndex) => {
       const ps = psItemsBySourceAndItem.get(`${item.sourceDocumentCode}::${normalizeName(item.namaBarang)}`);
